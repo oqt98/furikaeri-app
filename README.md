@@ -1,50 +1,94 @@
-# Welcome to your Expo app 👋
+# furikaeri-app
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+テンプレ選択式の振り返りアプリです。  
+自由記述だけに頼らず、**気分・カテゴリ・タグ・テンプレ**から振り返りを始められるようにしています。
 
-## Get started
+---
 
-1. Install dependencies
+## 📱 アプリ概要
 
-   ```bash
-   npm install
-   ```
+このアプリは、日々の振り返りを**「続けやすくする」**ことを目的にしたスマホアプリです。
 
-2. Start the app
+一般的な日記アプリのように、毎回ゼロから書くのではなく、
 
-   ```bash
-   npx expo start
-   ```
+- テンプレを選ぶ
+- 気分を選ぶ
+- タグを選ぶ
+- 必要な項目だけ入力する
 
-In the output, you'll find options to open the app in a
+という流れで、振り返りを始めやすくしています。
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+---
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
+## ✨ コンセプト
 
-## Get a fresh project
+- 何を書くか迷わない
+- 気分から入れる
+- あとで見返しやすい
+- 続けやすさを重視する
 
-When you're ready, run:
+このアプリの軸は、**「思考を補助する振り返り」**です。
 
-```bash
-npm run reset-project
-```
+---
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+## ✅ 現在できること
 
-## Learn more
+- テンプレ一覧から振り返り方法を選択
+- ランダムでテンプレ選択
+- 気分の選択
+- カテゴリの選択（仕事 / プラベ）
+- タグの選択
+- テンプレに応じた入力欄の表示
+- 振り返り内容の保存
+- 履歴一覧の表示
 
-To learn more about developing your project with Expo, look at the following resources:
+---
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+## 🧩 現在のテンプレ
 
-## Join the community
+- 一言日記
+- KPT
+- YWT
+- よかったこと3つ
 
-Join our community of developers creating universal apps.
+---
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+## 🏷 タグ例
+
+- ✈️ 旅行
+- 📘 読書
+- 🎞 映画
+- ♨️ サウナ
+- 🍺 お酒
+- 📷 カメラ
+- 💼 仕事
+- 🤝 人間関係
+- 🧠 学び
+- 💪 健康
+
+---
+
+## 🛠 使用技術
+
+- React Native
+- Expo
+- TypeScript
+- expo-router
+- AsyncStorage
+
+---
+
+## 📂 ディレクトリ構成
+
+```text
+app/
+  index.tsx      ホーム画面
+  entry.tsx      入力画面
+  history.tsx    履歴画面
+
+data/
+  templates.ts   テンプレ定義
+  tags.ts        タグ定義
+
+lib/
+  storage.ts     保存・取得処理
