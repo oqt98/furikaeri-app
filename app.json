@@ -1,0 +1,31 @@
+{
+  "expo": {
+    "name": "furikaeri-app",
+    "slug": "furikaeri-app",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "scheme": "furikaeriapp",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "package": "com.oqt98.furikaeriapp",
+      "edgeToEdgeEnabled": true,
+      "predictiveBackGestureEnabled": false
+    },
+    "plugins": [
+      "expo-router"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "a247146e-0c4d-4e76-9ed0-6d27681f5784"
+      }
+    }
+  }
+}
