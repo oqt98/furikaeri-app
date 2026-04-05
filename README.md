@@ -91,4 +91,8 @@ data/
   tags.ts        タグ定義
 
 lib/
+<<<<<<< HEAD
   storage.ts     保存・取得処理
+=======
+  storage.ts     保存・取得処理
+>>>>>>> cd5984b (feat: add swipe photo calendar heatmap favorite settings)

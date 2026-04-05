@@ -1,68 +1,97 @@
-import { Link } from 'expo-router';
-import { Pressable, ScrollView, StyleSheet, Text } from 'react-native';
+import { useRouter } from 'expo-router';
+import { useState } from 'react';
+import {
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
+import SwipeTabPage from '../../components/SwipeTabPage';
+import { templates } from '../../data/templates';
 
-const templates = [
-  {
-    id: 'oneLine',
-    name: '一言日記',
-    description: '軽く1日を残したいとき',
-  },
-  {
-    id: 'kpt',
-    name: 'KPT',
-    description: '仕事や学びを整理したいとき',
-  },
-  {
-    id: 'good3',
-    name: 'よかったこと3つ',
-    description: '前向きに1日を終えたいとき',
-  },
-];
+export default function CreateHomeScreen() {
+  const router = useRouter();
+  const [showTemplates, setShowTemplates] = useState(false);
 
-export default function HomeScreen() {
+  const handleStart = () => {
+    setShowTemplates(true);
+  };
+
+  const handleSelectTemplate = (templateId: string) => {
+    router.push({
+      pathname: '/entry',
+      params: { templateId },
+    });
+  };
+
+  const handleRandom = () => {
+    router.push({
+      pathname: '/entry',
+      params: { templateId: 'random' },
+    });
+  };
+
   return (
-    <ScrollView contentContainerStyle={styles.container}>
-      <Text style={styles.title}>振り返りアプリ</Text>
-      <Text style={styles.subtitle}>
-        気分や目的に合わせて、振り返りの型を選ぶ
-      </Text>
+    <SwipeTabPage tabKey="index">
+      <ScrollView contentContainerStyle={styles.container}>
+        <Text style={styles.title}>振り返りアプリ</Text>
+        <Text style={styles.subtitle}>
+          今日の出来事や気分を、気軽に残そう。
+        </Text>
 
-      <Text style={styles.sectionTitle}>テンプレを選ぶ</Text>
+        <View style={styles.heroCard}>
+          <Text style={styles.heroTitle}>今日の振り返りを始める</Text>
+          <Text style={styles.heroText}>
+            テンプレを選んで、仕事もプラベもサクッと記録できます。
+          </Text>
 
-      {templates.map((template) => (
-        <Link
-          key={template.id}
-          href={{
-            pathname: '/entry',
-            params: { templateId: template.id },
-          }}
-          asChild
-        >
-          <Pressable style={styles.card}>
-            <Text style={styles.cardTitle}>{template.name}</Text>
-            <Text style={styles.cardDesc}>{template.description}</Text>
+          <Pressable style={styles.primaryButton} onPress={handleStart}>
+            <Text style={styles.primaryButtonText}>
+              {showTemplates ? 'テンプレを選んでください' : '振り返りを始める'}
+            </Text>
           </Pressable>
-        </Link>
-      ))}
+        </View>
 
-      <Link
-        href={{
-          pathname: '/entry',
-          params: { templateId: 'random' },
-        }}
-        asChild
-      >
-        <Pressable style={[styles.button, styles.primaryButton]}>
-          <Text style={styles.primaryButtonText}>ランダムで選ぶ</Text>
-        </Pressable>
-      </Link>
+        {showTemplates ? (
+          <View style={styles.templateSection}>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>テンプレ一覧</Text>
 
-      <Link href="/history" asChild>
-        <Pressable style={[styles.button, styles.secondaryButton]}>
-          <Text style={styles.secondaryButtonText}>履歴を見る</Text>
-        </Pressable>
-      </Link>
-    </ScrollView>
+              <Pressable style={styles.randomButton} onPress={handleRandom}>
+                <Text style={styles.randomButtonText}>おまかせ</Text>
+              </Pressable>
+            </View>
+
+            {templates.map((template) => (
+              <Pressable
+                key={template.id}
+                style={styles.templateCard}
+                onPress={() => handleSelectTemplate(template.id)}
+              >
+                <View style={styles.templateTopRow}>
+                  <Text style={styles.templateName}>{template.name}</Text>
+                  <Text style={styles.templateArrow}>›</Text>
+                </View>
+
+                <Text style={styles.templateDescription}>
+                  {template.description}
+                </Text>
+
+                <Text style={styles.templateMode}>🧭 {template.mode}</Text>
+              </Pressable>
+            ))}
+          </View>
+        ) : (
+          <View style={styles.guideCard}>
+            <Text style={styles.guideTitle}>使えるテンプレ</Text>
+            <Text style={styles.guideText}>
+              一言日記 / KPT / YWT / よかったこと3つ など
+            </Text>
+          </View>
+        )}
+      </ScrollView>
+    </SwipeTabPage>
   );
 }
 
@@ -71,62 +100,130 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     backgroundColor: '#f7f8fa',
     padding: 20,
+    paddingBottom: 120,
   },
   title: {
     fontSize: 28,
     fontWeight: '700',
     marginTop: 12,
     marginBottom: 8,
+    color: '#111',
   },
   subtitle: {
     fontSize: 14,
     color: '#666',
-    marginBottom: 24,
-    lineHeight: 20,
+    marginBottom: 20,
   },
-  sectionTitle: {
-    fontSize: 18,
+  heroCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 16,
+    padding: 18,
+    borderWidth: 1,
+    borderColor: '#e3e6eb',
+    marginBottom: 18,
+  },
+  heroTitle: {
+    fontSize: 20,
     fontWeight: '700',
-    marginBottom: 12,
+    color: '#111',
+    marginBottom: 8,
   },
-  card: {
+  heroText: {
+    fontSize: 14,
+    color: '#555',
+    lineHeight: 20,
+    marginBottom: 16,
+  },
+  primaryButton: {
+    backgroundColor: '#111',
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: 'center',
+  },
+  primaryButtonText: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  guideCard: {
     backgroundColor: '#fff',
     borderRadius: 14,
     padding: 16,
-    marginBottom: 12,
     borderWidth: 1,
     borderColor: '#e3e6eb',
   },
-  cardTitle: {
-    fontSize: 17,
+  guideTitle: {
+    fontSize: 15,
     fontWeight: '700',
-    marginBottom: 4,
+    color: '#111',
+    marginBottom: 8,
   },
-  cardDesc: {
+  guideText: {
     fontSize: 14,
     color: '#666',
     lineHeight: 20,
   },
-  button: {
-    borderRadius: 12,
-    paddingVertical: 14,
+  templateSection: {
+    marginTop: 4,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    marginTop: 8,
+    marginBottom: 12,
   },
-  primaryButton: {
-    backgroundColor: '#2f6fed',
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#111',
   },
-  secondaryButton: {
-    backgroundColor: '#111',
+  randomButton: {
+    backgroundColor: '#eef4ff',
+    borderWidth: 1,
+    borderColor: '#bfd3ff',
+    borderRadius: 999,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
   },
-  primaryButtonText: {
-    color: '#fff',
-    fontSize: 16,
+  randomButtonText: {
+    color: '#1d4ed8',
+    fontSize: 13,
     fontWeight: '700',
   },
-  secondaryButtonText: {
-    color: '#fff',
-    fontSize: 16,
+  templateCard: {
+    backgroundColor: '#fff',
+    borderRadius: 14,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#e3e6eb',
+    marginBottom: 12,
+  },
+  templateTopRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  templateName: {
+    fontSize: 17,
     fontWeight: '700',
+    color: '#111',
+  },
+  templateArrow: {
+    fontSize: 24,
+    color: '#999',
+    fontWeight: '400',
+    marginTop: -2,
+  },
+  templateDescription: {
+    fontSize: 14,
+    color: '#666',
+    lineHeight: 20,
+    marginBottom: 8,
+  },
+  templateMode: {
+    fontSize: 13,
+    color: '#2f6fed',
+    fontWeight: '600',
   },
 });
