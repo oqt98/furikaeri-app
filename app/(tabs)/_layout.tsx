@@ -59,7 +59,8 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: '作成',
+          title: 'ホーム',
+          tabBarButtonTestID: 'tab-home',
           tabBarIcon: ({ color, size, focused }) => (
             <TabIcon
               name={focused ? 'create' : 'create-outline'}
@@ -74,6 +75,7 @@ export default function TabsLayout() {
         name="history"
         options={{
           title: '一覧',
+          tabBarButtonTestID: 'tab-history',
           tabBarIcon: ({ color, size, focused }) => (
             <TabIcon
               name={focused ? 'albums' : 'albums-outline'}
@@ -88,6 +90,7 @@ export default function TabsLayout() {
         name="calendar"
         options={{
           title: 'カレンダー',
+          tabBarButtonTestID: 'tab-calendar',
           tabBarIcon: ({ color, size, focused }) => (
             <TabIcon
               name={focused ? 'calendar' : 'calendar-outline'}
@@ -102,6 +105,7 @@ export default function TabsLayout() {
         name="analytics"
         options={{
           title: '分析',
+          tabBarButtonTestID: 'tab-analytics',
           tabBarIcon: ({ color, size, focused }) => (
             <TabIcon
               name={focused ? 'stats-chart' : 'stats-chart-outline'}
@@ -116,6 +120,7 @@ export default function TabsLayout() {
         name="settings"
         options={{
           title: '設定',
+          tabBarButtonTestID: 'tab-settings',
           tabBarIcon: ({ color, size, focused }) => (
             <TabIcon
               name={focused ? 'settings' : 'settings-outline'}

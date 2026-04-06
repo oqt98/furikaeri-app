@@ -41,6 +41,7 @@ export default function TemplatesScreen() {
   }: RenderItemParams<ReviewTemplate>) => (
     <ScaleDecorator>
       <Pressable
+        testID={`template-card-${item.id}`}
         onPress={() => handleSelect(item.id)}
         style={[styles.templateCard, isActive && styles.activeCard]}
       >
@@ -86,7 +87,7 @@ export default function TemplatesScreen() {
               </View>
             </View>
 
-            <Pressable style={styles.randomCard} onPress={handleRandom}>
+            <Pressable testID="templates-random-button" style={styles.randomCard} onPress={handleRandom}>
               <View>
                 <Text style={styles.randomTitle}>おまかせで選ぶ</Text>
                 <Text style={styles.randomText}>

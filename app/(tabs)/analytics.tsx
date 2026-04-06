@@ -99,14 +99,14 @@ export default function AnalyticsScreen() {
 
   return (
     <SwipeTabPage tabKey="analytics">
-      <ScrollView contentContainerStyle={styles.container}>
+      <ScrollView testID="screen-analytics" contentContainerStyle={styles.container}>
         <Text style={styles.title}>分析</Text>
         <Text style={styles.subtitle}>
           軽めの集計だけに絞って、次の日に活かしやすい形で見せます。
         </Text>
 
         {!hasData ? (
-          <View style={styles.emptyCard}>
+          <View testID="analytics-empty-state" style={styles.emptyCard}>
             <Text style={styles.emptyTitle}>まだ分析できる記録がありません</Text>
             <Text style={styles.emptyText}>
               数件たまると、気分やタグの偏りが見え始めます。

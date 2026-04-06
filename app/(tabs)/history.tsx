@@ -132,7 +132,7 @@ export default function HistoryScreen() {
 
   return (
     <SwipeTabPage tabKey="history">
-      <ScrollView contentContainerStyle={styles.container}>
+      <ScrollView testID="screen-history" contentContainerStyle={styles.container}>
         <Text style={styles.title}>一覧</Text>
         <Text style={styles.subtitle}>
           お気に入りやタグ、キーワードで絞り込みながら見返せます。
@@ -196,11 +196,13 @@ export default function HistoryScreen() {
 
         {reviews.length === 0 ? (
           <EmptyState
+            testID="history-empty-state"
             title="まだ記録がありません"
             body="最初の 1 件を作成すると、ここから見返せるようになります。"
           />
         ) : filteredReviews.length === 0 ? (
           <EmptyState
+            testID="history-filter-empty-state"
             title="条件に合う記録がありません"
             body="検索条件を少しゆるめると見つかるかもしれません。"
           />
@@ -354,9 +356,17 @@ function FilterSection({
   );
 }
 
-function EmptyState({ title, body }: { title: string; body: string }) {
+function EmptyState({
+  title,
+  body,
+  testID,
+}: {
+  title: string;
+  body: string;
+  testID?: string;
+}) {
   return (
-    <View style={styles.emptyCard}>
+    <View testID={testID} style={styles.emptyCard}>
       <View style={styles.emptyIcon}>
         <Ionicons name="trail-sign-outline" size={20} color={theme.colors.primaryDark} />
       </View>

@@ -1,9 +1,4 @@
-import {
-  CATEGORIES,
-  MOOD_OPTIONS,
-  type CategoryOption,
-  type MoodValue,
-} from '../data/reviewOptions';
+import { CATEGORIES, type CategoryOption, type MoodValue } from '../data/reviewOptions';
 import { templates } from '../data/templates';
 
 export type NotionImportIssue = {
@@ -15,145 +10,126 @@ export type NotionImportDraft = {
   sourceRowNumber: number;
   createdAt: string;
   category: CategoryOption;
-  mood?: MoodValue;
+  mood: MoodValue;
   templateId: string;
   templateName: string;
-  actionTags: string[];
-  stateTags: string[];
   answers: Record<string, string>;
-  isFavorite: boolean;
+  importSource: 'notion-import';
+  importFingerprint: string;
 };
 
 export type NotionImportParseResult = {
   drafts: NotionImportDraft[];
   issues: NotionImportIssue[];
+  readCount: number;
 };
 
-export const NOTION_IMPORT_COLUMNS = {
-  required: ['date', 'template'],
-  optional: ['category', 'mood', 'favorite', 'action_tags', 'state_tags'],
-  note: 'Template answer columns should use the existing field keys such as keep, problem, try, title, memo, glad, sad, mad.',
+const REQUIRED_HEADERS = {
+  title: ['タイトル', 'title'],
+  mood: ['今日の気分', 'mood'],
+  date: ['日付', 'date'],
 } as const;
 
-const HEADER_ALIASES: Record<string, string[]> = {
-  date: ['date', '日付', 'created_at', 'created at'],
-  template: ['template', 'テンプレート', 'review template', 'template_name'],
-  category: ['category', 'カテゴリ'],
-  mood: ['mood', '気分', 'mood_value'],
-  favorite: ['favorite', 'is_favorite', 'favorite_flag', 'お気に入り'],
-  action_tags: ['action_tags', 'action tags', 'action tag', '行動タグ'],
-  state_tags: ['state_tags', 'state tags', 'state tag', '状態タグ'],
-};
-
-const RAW_TEMPLATE_ALIASES: Array<[string, string[]]> = [
-  ['diary', ['diary', 'journal', 'memo']],
-  ['kpt', ['kpt']],
-  ['ywt', ['ywt']],
-  ['good3', ['good3', 'good 3', 'good-3']],
-  ['ssc', ['ssc', 'start stop continue', 'start / stop / continue']],
-  ['4ls', ['4ls', 'liked learned lacked longed for']],
-  ['rose-thorn-bud', ['rose thorn bud', 'rose / thorn / bud']],
-  ['sailboat', ['sailboat']],
-  ['starfish', ['starfish']],
-  ['glad-sad-mad', ['glad sad mad', 'glad / sad / mad']],
-];
-
-const TEMPLATE_ALIASES = new Map<string, string[]>(
-  RAW_TEMPLATE_ALIASES.map(([id, aliases]) => [id, aliases.map(normalizeLookupValue)])
-);
+const DEFAULT_TEMPLATE =
+  templates.find((template) => template.id === 'diary') ?? templates[0];
 
 export function parseNotionCsv(csvText: string): NotionImportParseResult {
   const rows = parseCsv(csvText);
+
   if (rows.length === 0) {
     return {
       drafts: [],
       issues: [{ rowNumber: 1, reason: 'CSV が空です。' }],
+      readCount: 0,
     };
   }
 
   const [headerRow, ...dataRows] = rows;
   const normalizedHeaders = headerRow.map((value) => normalizeHeader(value));
-  const headerLookup = new Map<string, number>();
+  const headerIndex = {
+    title: findRequiredHeaderIndex(normalizedHeaders, REQUIRED_HEADERS.title),
+    mood: findRequiredHeaderIndex(normalizedHeaders, REQUIRED_HEADERS.mood),
+    date: findRequiredHeaderIndex(normalizedHeaders, REQUIRED_HEADERS.date),
+  };
 
-  normalizedHeaders.forEach((header, index) => {
-    if (!header || headerLookup.has(header)) return;
-    headerLookup.set(header, index);
-  });
+  const missingHeaders = Object.entries(headerIndex)
+    .filter(([, index]) => index === undefined)
+    .map(([key]) => key);
 
-  const missingRequiredHeaders = NOTION_IMPORT_COLUMNS.required.filter(
-    (header) => findHeaderIndex(headerLookup, header) === undefined
-  );
-
-  if (missingRequiredHeaders.length > 0) {
+  if (missingHeaders.length > 0) {
     return {
       drafts: [],
       issues: [
         {
           rowNumber: 1,
-          reason: `必須列が不足しています: ${missingRequiredHeaders.join(', ')}`,
+          reason: `必須列が不足しています: ${missingHeaders.join(', ')}`,
         },
       ],
+      readCount: 0,
     };
   }
 
+  const titleIndex = headerIndex.title as number;
+  const moodIndex = headerIndex.mood as number;
+  const dateIndex = headerIndex.date as number;
+
   const drafts: NotionImportDraft[] = [];
   const issues: NotionImportIssue[] = [];
+  let readCount = 0;
 
   dataRows.forEach((row, index) => {
     const rowNumber = index + 2;
-    const record = buildRecord(normalizedHeaders, row);
+    const title = readCell(row, titleIndex).trim();
+    const moodValue = readCell(row, moodIndex).trim();
+    const dateValue = readCell(row, dateIndex).trim();
 
-    if (Object.values(record).every((value) => value.trim() === '')) {
+    if (!title && !moodValue && !dateValue) {
       return;
     }
 
-    const dateValue = findValue(record, 'date');
-    const parsedDate = parseDateValue(dateValue);
-    if (!parsedDate) {
-      issues.push({ rowNumber, reason: 'date が不正です。' });
+    readCount += 1;
+
+    if (!title) {
+      issues.push({ rowNumber, reason: 'タイトルが空です。' });
       return;
     }
 
-    const matchedTemplate = findTemplate(findValue(record, 'template'));
-    if (!matchedTemplate) {
-      issues.push({ rowNumber, reason: 'template が既存テンプレートに一致しません。' });
+    const createdAt = parseNotionDate(dateValue);
+    if (!createdAt) {
+      issues.push({ rowNumber, reason: '日付を解釈できませんでした。' });
       return;
     }
 
-    const category = parseCategory(findValue(record, 'category'));
-    const mood = parseMood(findValue(record, 'mood'));
-    const actionTags = splitTagValue(findValue(record, 'action_tags'));
-    const stateTags = splitTagValue(findValue(record, 'state_tags'));
-    const answers = extractAnswers(record, matchedTemplate.id);
-
-    const hasContent =
-      Object.values(answers).some((value) => value.trim()) ||
-      actionTags.length > 0 ||
-      stateTags.length > 0;
-
-    if (!hasContent) {
-      issues.push({
-        rowNumber,
-        reason: '回答またはタグが空のため取り込み対象外です。',
-      });
-      return;
-    }
+    const mood = mapNotionMood(moodValue);
 
     drafts.push({
       sourceRowNumber: rowNumber,
-      createdAt: parsedDate,
-      category,
+      createdAt,
+      category: CATEGORIES[0],
       mood,
-      templateId: matchedTemplate.id,
-      templateName: matchedTemplate.name,
-      actionTags,
-      stateTags,
-      answers,
-      isFavorite: parseBoolean(findValue(record, 'favorite')),
+      templateId: DEFAULT_TEMPLATE.id,
+      templateName: DEFAULT_TEMPLATE.name,
+      answers: {
+        title,
+      },
+      importSource: 'notion-import',
+      importFingerprint: buildNotionFingerprint({
+        dateKey: toDateKey(new Date(createdAt)),
+        title,
+        mood,
+      }),
     });
   });
 
-  return { drafts, issues };
+  drafts.sort(
+    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+  );
+
+  return {
+    drafts,
+    issues,
+    readCount,
+  };
 }
 
 function parseCsv(text: string) {
@@ -205,134 +181,88 @@ function parseCsv(text: string) {
   return rows;
 }
 
-function buildRecord(headers: string[], row: string[]) {
-  return headers.reduce<Record<string, string>>((acc, header, index) => {
-    if (!header) return acc;
-    acc[header] = (row[index] ?? '').trim();
-    return acc;
-  }, {});
+function normalizeHeader(value: string) {
+  return value.replace(/^\uFEFF/, '').trim().toLowerCase();
 }
 
-function findValue(record: Record<string, string>, canonicalHeader: string) {
-  const aliases = HEADER_ALIASES[canonicalHeader] ?? [canonicalHeader];
-  const matchedHeader = aliases
-    .map((alias) => normalizeHeader(alias))
-    .find((header) => record[header] !== undefined);
-
-  return matchedHeader ? record[matchedHeader] : '';
+function findRequiredHeaderIndex(headers: string[], aliases: readonly string[]) {
+  const normalizedAliases = aliases.map((alias) => alias.trim().toLowerCase());
+  const index = headers.findIndex((header) => normalizedAliases.includes(header));
+  return index >= 0 ? index : undefined;
 }
 
-function findHeaderIndex(headerLookup: Map<string, number>, canonicalHeader: string) {
-  const aliases = HEADER_ALIASES[canonicalHeader] ?? [canonicalHeader];
-  return aliases
-    .map((alias) => headerLookup.get(normalizeHeader(alias)))
-    .find((value) => value !== undefined);
+function readCell(row: string[], index: number) {
+  return row[index] ?? '';
 }
 
-function findTemplate(value: string) {
-  const normalized = normalizeLookupValue(value);
-  if (!normalized) return null;
-
-  return (
-    templates.find((template) => {
-      if (normalizeLookupValue(template.id) === normalized) return true;
-      if (normalizeLookupValue(template.name) === normalized) return true;
-
-      const aliases = TEMPLATE_ALIASES.get(template.id) ?? [];
-      return aliases.includes(normalized);
-    }) ?? null
-  );
-}
-
-function parseDateValue(value: string) {
+function parseNotionDate(value: string) {
   const trimmed = value.trim();
   if (!trimmed) return null;
 
-  const dateOnlyMatch = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if (dateOnlyMatch) {
-    const [, year, month, day] = dateOnlyMatch;
-    const localDate = new Date(Number(year), Number(month) - 1, Number(day), 12, 0, 0);
-    return Number.isNaN(localDate.getTime()) ? null : localDate.toISOString();
+  const slashMatch = trimmed.match(/^(\d{4})\/(\d{2})\/(\d{2})$/);
+  if (slashMatch) {
+    const [, year, month, day] = slashMatch;
+    return buildIsoDate(Number(year), Number(month), Number(day));
+  }
+
+  const dashMatch = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (dashMatch) {
+    const [, year, month, day] = dashMatch;
+    return buildIsoDate(Number(year), Number(month), Number(day));
   }
 
   const parsed = new Date(trimmed);
   return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
 }
 
-function parseCategory(value: string): CategoryOption {
-  const normalized = normalizeLookupValue(value);
+function mapNotionMood(value: string): MoodValue {
+  const normalized = value.replace(/\s+/g, '');
 
-  return (
-    CATEGORIES.find((category) => normalizeLookupValue(category) === normalized) ??
-    CATEGORIES[0]
+  if (normalized === '☀') return 5;
+  if (normalized === '☀,☁' || normalized === '☀,☁,' || normalized === '☀,☁︎') {
+    return 4;
+  }
+  if (normalized === '☁') return 3;
+  if (normalized === '☔') return 2;
+
+  return 3;
+}
+
+function buildNotionFingerprint({
+  dateKey,
+  title,
+  mood,
+}: {
+  dateKey: string;
+  title: string;
+  mood: MoodValue;
+}) {
+  return ['notion-import', dateKey, normalizeFingerprintValue(title), String(mood)].join(
+    '::'
   );
 }
 
-function parseMood(value: string): MoodValue | undefined {
-  const trimmed = value.trim();
-  if (!trimmed) return undefined;
+function normalizeFingerprintValue(value: string) {
+  return value.trim().replace(/\s+/g, ' ').toLowerCase();
+}
 
-  const numeric = Number(trimmed);
-  if (Number.isInteger(numeric)) {
-    const matched = MOOD_OPTIONS.find((item) => item.value === numeric);
-    if (matched) return matched.value;
+function buildIsoDate(year: number, month: number, day: number) {
+  const date = new Date(year, month - 1, day, 12, 0, 0);
+  if (
+    Number.isNaN(date.getTime()) ||
+    date.getFullYear() !== year ||
+    date.getMonth() !== month - 1 ||
+    date.getDate() !== day
+  ) {
+    return null;
   }
 
-  const normalized = normalizeLookupValue(trimmed);
-  return MOOD_OPTIONS.find((item) => {
-    const label = normalizeLookupValue(item.label);
-    const emojiLabel = normalizeLookupValue(`${item.emoji} ${item.label}`);
-    return normalized === label || normalized === emojiLabel;
-  })?.value;
+  return date.toISOString();
 }
 
-function parseBoolean(value: string) {
-  const normalized = normalizeLookupValue(value);
-  return ['true', '1', 'yes', 'y', 'on', 'favorite', '★', '☆'].includes(normalized);
-}
-
-function splitTagValue(value: string) {
-  return Array.from(
-    new Set(
-      value
-        .split(/[,\n/|、]/)
-        .map((item) => item.trim())
-        .filter(Boolean)
-    )
-  );
-}
-
-function extractAnswers(record: Record<string, string>, templateId: string) {
-  const template = templates.find((item) => item.id === templateId);
-  if (!template) return {};
-
-  return template.fields.reduce<Record<string, string>>((acc, field) => {
-    const fieldKeys = [
-      normalizeHeader(field.key),
-      normalizeHeader(field.label),
-      normalizeHeader(`${template.id}_${field.key}`),
-    ];
-    const matchedKey = fieldKeys.find((key) => record[key] !== undefined);
-    if (!matchedKey) return acc;
-
-    const value = record[matchedKey].trim();
-    if (!value) return acc;
-
-    acc[field.key] = value;
-    return acc;
-  }, {});
-}
-
-function normalizeHeader(value: string) {
-  const trimmed = value.replace(/^\uFEFF/, '').trim();
-  const matchedAlias = Object.entries(HEADER_ALIASES).find(([, aliases]) =>
-    aliases.some((alias) => normalizeLookupValue(alias) === normalizeLookupValue(trimmed))
-  );
-
-  if (matchedAlias) return matchedAlias[0];
-  return normalizeLookupValue(trimmed).replace(/\s+/g, '_');
-}
-
-function normalizeLookupValue(value: string) {
-  return value.trim().toLowerCase().replace(/\s+/g, ' ');
+function toDateKey(date: Date) {
+  const year = date.getFullYear();
+  const month = `${date.getMonth() + 1}`.padStart(2, '0');
+  const day = `${date.getDate()}`.padStart(2, '0');
+  return `${year}-${month}-${day}`;
 }

@@ -48,6 +48,8 @@ export type ReviewItem = {
   answers: Record<string, string>;
   photos: ReviewPhoto[];
   isFavorite?: boolean;
+  importSource?: 'notion-import';
+  importFingerprint?: string;
 };
 
 export type ImportReviewDraft = {
@@ -57,10 +59,10 @@ export type ImportReviewDraft = {
   mood?: MoodValue;
   templateId?: string;
   templateName: string;
-  actionTags?: string[];
-  stateTags?: string[];
   answers: Record<string, string>;
   isFavorite?: boolean;
+  importSource?: 'notion-import';
+  importFingerprint?: string;
 };
 
 export type ImportReviewsResult = {
@@ -87,6 +89,8 @@ type LegacyReviewItem = {
   isFavorite?: boolean;
   actionTagIds?: string[];
   stateTagIds?: string[];
+  importSource?: 'notion-import';
+  importFingerprint?: string;
 };
 
 type TagCatalog = Record<TagType, TagDefinition[]>;
@@ -180,18 +184,12 @@ export async function clearAllReviews(): Promise<void> {
 export async function importReviews(
   drafts: ImportReviewDraft[]
 ): Promise<ImportReviewsResult> {
-  const [current, currentCatalog] = await Promise.all([getReviews(), getTagCatalog()]);
-  const catalog: TagCatalog = {
-    action: currentCatalog.action.map((item) => ({ ...item })),
-    state: currentCatalog.state.map((item) => ({ ...item })),
-  };
-  const labelMaps = {
-    action: buildTagLabelLookup(catalog.action),
-    state: buildTagLabelLookup(catalog.state),
-  };
+  const current = await getReviews();
   const skipped: ImportReviewsResult['skipped'] = [];
-  const existingDateMap = new Map(
-    current.map((item) => [toDateKey(new Date(item.createdAt)), item.id] as const)
+  const existingFingerprintMap = new Map(
+    current
+      .filter((item) => item.importFingerprint)
+      .map((item) => [item.importFingerprint as string, item.id] as const)
   );
   const accepted: ReviewItem[] = [];
 
@@ -205,34 +203,28 @@ export async function importReviews(
       return;
     }
 
-    const dateKey = toDateKey(createdAt);
-    const existingReviewId = existingDateMap.get(dateKey);
+    const existingReviewId = draft.importFingerprint
+      ? existingFingerprintMap.get(draft.importFingerprint)
+      : undefined;
     if (existingReviewId) {
       skipped.push({
         sourceRowNumber: draft.sourceRowNumber,
-        reason: '同じ日付のレビューが既にあるためスキップしました。',
+        reason: '同じ Notion データが既に取り込まれているためスキップしました。',
         existingReviewId,
       });
       return;
     }
 
     const duplicateDraft = accepted.find(
-      (item) => toDateKey(new Date(item.createdAt)) === dateKey
+      (item) => item.importFingerprint && item.importFingerprint === draft.importFingerprint
     );
     if (duplicateDraft) {
       skipped.push({
         sourceRowNumber: draft.sourceRowNumber,
-        reason: 'CSV 内で同じ日付が重複しているため後ろの行をスキップしました。',
+        reason: 'CSV 内で同じデータが重複しているためスキップしました。',
       });
       return;
     }
-
-    const actionTagIds = (draft.actionTags ?? []).map((label) =>
-      ensureTagDefinition(catalog, labelMaps.action, 'action', label)
-    );
-    const stateTagIds = (draft.stateTags ?? []).map((label) =>
-      ensureTagDefinition(catalog, labelMaps.state, 'state', label)
-    );
 
     accepted.push(
       normalizeReviewForSave({
@@ -243,26 +235,25 @@ export async function importReviews(
         mood: draft.mood,
         templateId: draft.templateId,
         templateName: draft.templateName,
-        actionTagIds,
-        stateTagIds,
+        actionTagIds: [],
+        stateTagIds: [],
         answers: draft.answers,
         photos: [],
         isFavorite: draft.isFavorite ?? false,
+        importSource: draft.importSource,
+        importFingerprint: draft.importFingerprint,
       })
     );
-    existingDateMap.set(dateKey, `import-${index}`);
+    if (draft.importFingerprint) {
+      existingFingerprintMap.set(draft.importFingerprint, `import-${index}`);
+    }
   });
 
   if (accepted.length > 0) {
-    await Promise.all([
-      AsyncStorage.setItem(
-        STORAGE_KEY,
-        JSON.stringify(
-          [...accepted].sort(sortReviewsByCreatedAtDesc).concat(current)
-        )
-      ),
-      saveTagCatalog(catalog),
-    ]);
+    await AsyncStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify([...accepted, ...current].sort(sortReviewsByCreatedAtDesc))
+    );
   }
 
   return {
@@ -416,6 +407,8 @@ function normalizeReview(item: LegacyReviewItem, tagCatalog: TagCatalog): Review
     answers: item.answers ?? {},
     photos,
     isFavorite: item.isFavorite ?? false,
+    importSource: item.importSource,
+    importFingerprint: item.importFingerprint,
   };
 }
 
@@ -428,6 +421,8 @@ function normalizeReviewForSave(item: ReviewItem): ReviewItem {
     stateTagIds: dedupe(item.stateTagIds ?? []),
     photos: normalizePhotos(item),
     isFavorite: item.isFavorite ?? false,
+    importSource: item.importSource,
+    importFingerprint: item.importFingerprint,
   };
 }
 
@@ -523,46 +518,8 @@ function buildLegacyTagLookup(catalog: TagCatalog) {
   );
 }
 
-function buildTagLabelLookup(tags: TagDefinition[]) {
-  return new Map(tags.map((tag) => [normalizeTagLabel(tag.label), tag.id] as const));
-}
-
-function ensureTagDefinition(
-  catalog: TagCatalog,
-  lookup: Map<string, string>,
-  type: TagType,
-  rawLabel: string
-) {
-  const label = rawLabel.trim();
-  const normalizedLabel = normalizeTagLabel(label);
-  const existingId = lookup.get(normalizedLabel);
-
-  if (existingId) {
-    const existing = catalog[type].find((item) => item.id === existingId);
-    if (existing?.isArchived) {
-      existing.isArchived = false;
-    }
-    return existingId;
-  }
-
-  const nextTag: TagDefinition = {
-    id: `${type}-${Date.now()}-${lookup.size}`,
-    label,
-    type,
-    isArchived: false,
-    createdAt: new Date().toISOString(),
-  };
-  catalog[type] = [nextTag, ...catalog[type]];
-  lookup.set(normalizedLabel, nextTag.id);
-  return nextTag.id;
-}
-
 function dedupe(values: string[]) {
   return Array.from(new Set(values.filter(Boolean)));
-}
-
-function normalizeTagLabel(value: string) {
-  return value.trim().toLowerCase();
 }
 
 function sortReviewsByCreatedAtDesc(a: ReviewItem, b: ReviewItem) {

@@ -23,7 +23,7 @@ export default function CreateHomeScreen() {
 
   return (
     <SwipeTabPage tabKey="index">
-      <ScrollView contentContainerStyle={styles.container}>
+      <ScrollView testID="screen-home" contentContainerStyle={styles.container}>
         <Text style={styles.brand}>{brand.name}</Text>
         <Text style={styles.heroTitle}>{brand.subtitle}</Text>
         <Text style={styles.heroText}>
@@ -44,6 +44,7 @@ export default function CreateHomeScreen() {
           </Text>
 
           <Pressable
+            testID="home-start-review-button"
             style={styles.primaryButton}
             onPress={() => router.push('/templates')}
           >

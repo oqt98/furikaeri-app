@@ -118,7 +118,7 @@ export default function CalendarScreen() {
 
   return (
     <SwipeTabPage tabKey="calendar">
-      <ScrollView contentContainerStyle={styles.container}>
+      <ScrollView testID="screen-calendar" contentContainerStyle={styles.container}>
         <Text style={styles.title}>カレンダー</Text>
         <Text style={styles.subtitle}>
           お気に入りがある日は強めに目立たせています。
@@ -227,7 +227,7 @@ export default function CalendarScreen() {
             <Text style={styles.sectionTitle}>{formatDateLabel(selectedDateKey)}</Text>
           </View>
 
-          <Pressable style={styles.createButton} onPress={handleCreate}>
+          <Pressable testID="calendar-create-button" style={styles.createButton} onPress={handleCreate}>
             <Ionicons name="add" size={16} color={theme.colors.white} />
             <Text style={styles.createButtonText}>この日に作成</Text>
           </Pressable>

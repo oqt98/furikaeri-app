@@ -33,6 +33,14 @@ Notifications.setNotificationHandler({
   }),
 });
 
+type ImportSummary = {
+  readCount: number;
+  addedCount: number;
+  skippedCount: number;
+  errorCount: number;
+  details: { rowNumber: number; reason: string }[];
+};
+
 export default function SettingsScreen() {
   const router = useRouter();
   const [isClearing, setIsClearing] = useState(false);
@@ -60,7 +68,7 @@ export default function SettingsScreen() {
     try {
       setIsClearing(true);
       await clearAllReviews();
-      Alert.alert('すべての記録を削除しました');
+      Alert.alert('記録をすべて削除しました');
     } catch (error) {
       console.error(error);
       Alert.alert('削除に失敗しました');
@@ -117,10 +125,16 @@ export default function SettingsScreen() {
   const handleApplyTextTime = () => {
     const hour = Number(hourInput);
     const minute = Number(minuteInput);
-    const valid = Number.isInteger(hour) && hour >= 0 && hour <= 23 && Number.isInteger(minute) && minute >= 0 && minute <= 59;
+    const valid =
+      Number.isInteger(hour) &&
+      hour >= 0 &&
+      hour <= 23 &&
+      Number.isInteger(minute) &&
+      minute >= 0 &&
+      minute <= 59;
 
     if (!valid) {
-      Alert.alert('時刻の形式が正しくありません', '0-23 時、0-59 分で入力してください。');
+      Alert.alert('時刻の形式が正しくありません', '0-23 / 0-59 で入力してください。');
       return;
     }
 
@@ -134,26 +148,27 @@ export default function SettingsScreen() {
       const pickedFile = Array.isArray(selected) ? selected[0] : selected;
       const csvText = await pickedFile.text();
       const parsed = parseNotionCsv(csvText);
-
-      if (parsed.drafts.length === 0) {
-        Alert.alert(
-          'CSV を取り込めませんでした',
-          buildImportResultMessage(0, parsed.issues)
-        );
-        return;
-      }
-
       const imported = await importReviews(parsed.drafts);
-      const issues = parsed.issues.concat(
-        imported.skipped.map((item) => ({
-          rowNumber: item.sourceRowNumber ?? 0,
-          reason: item.reason,
-        }))
-      );
+      const summary: ImportSummary = {
+        readCount: parsed.readCount,
+        addedCount: imported.importedCount,
+        skippedCount: imported.skipped.length,
+        errorCount: parsed.issues.length,
+        details: parsed.issues
+          .concat(
+            imported.skipped.map((item) => ({
+              rowNumber: item.sourceRowNumber ?? 0,
+              reason: item.reason,
+            }))
+          )
+          .slice(0, 6),
+      };
 
       Alert.alert(
-        'CSV を取り込みました',
-        buildImportResultMessage(imported.importedCount, issues)
+        summary.readCount === 0
+          ? 'Notion CSV を取り込めませんでした'
+          : 'Notion CSV を取り込みました',
+        buildImportResultMessage(summary)
       );
     } catch (error) {
       if (isCancelledFilePick(error)) {
@@ -161,7 +176,7 @@ export default function SettingsScreen() {
       }
 
       console.error(error);
-      Alert.alert('CSV の取り込みに失敗しました');
+      Alert.alert('Notion CSV の取り込みに失敗しました');
     } finally {
       setIsImportingCsv(false);
     }
@@ -170,42 +185,43 @@ export default function SettingsScreen() {
   return (
     <SwipeTabPage tabKey="settings">
       <ScrollView contentContainerStyle={styles.container}>
-        <SectionCard title="CSV Import">
-          <Text style={styles.sectionBody}>
-            Notion の CSV を読み込んで、現在の振り返り形式に変換して保存します。初版では写真は取り込まず、同じ日付のレビューはスキップします。
-          </Text>
-          <Pressable
-            style={[styles.linkButton, isImportingCsv && { opacity: 0.6 }]}
-            onPress={() => {
-              void handleImportCsv();
-            }}
-            disabled={isImportingCsv}
-          >
-            <Text style={styles.linkButtonText}>
-              {isImportingCsv ? 'CSV を読み込み中...' : 'CSV を選ぶ'}
-            </Text>
-          </Pressable>
-        </SectionCard>
         <Text style={styles.title}>設定</Text>
         <Text style={styles.subtitle}>
-          使い方を軽く保ったまま、通知やタグだけ調整できます。
+          リマインド、タグ管理、Notion CSV インポート、データ削除をここで行えます。
         </Text>
 
         <View style={styles.brandCard}>
           <Text style={styles.brandName}>{brand.name}</Text>
           <Text style={styles.brandSubtitle}>{brand.subtitle}</Text>
           <Text style={styles.brandText}>
-            入力負荷を増やしすぎず、見返しやすさを優先する前提で設定します。
+            軽く振り返って、あとから見返しやすくするための設定をまとめています。
           </Text>
         </View>
 
+        <SectionCard title="Notion CSV Import">
+          <Text style={styles.sectionBody}>
+            Notion の `タイトル / 今日の気分 / 日付` を既存レビューへ取り込みます。完全重複はスキップし、同じ日付でも別タイトルなら別レコードとして追加します。
+          </Text>
+          <Pressable
+            style={[styles.linkButton, isImportingCsv && styles.disabledButton]}
+            onPress={() => {
+              void handleImportCsv();
+            }}
+            disabled={isImportingCsv}
+          >
+            <Text style={styles.linkButtonText}>
+              {isImportingCsv ? 'CSV を読み込み中...' : 'Notion CSV を取り込む'}
+            </Text>
+          </Pressable>
+        </SectionCard>
+
         <SectionCard title="リマインド">
           <Text style={styles.sectionBody}>
-            通知は 1 日 1 回だけです。分単位で時刻を指定できます。
+            1 日 1 回、指定した時刻に振り返りの通知を送ります。
           </Text>
 
           <View style={styles.toggleRow}>
-            <View style={{ flex: 1 }}>
+            <View style={styles.flexFill}>
               <Text style={styles.toggleTitle}>毎日のリマインド</Text>
               <Text style={styles.toggleSubtitle}>
                 {reminderEnabled
@@ -286,28 +302,24 @@ export default function SettingsScreen() {
 
         <SectionCard title="タグ管理">
           <Text style={styles.sectionBody}>
-            行動タグと状態タグを別々に追加・非表示できます。
+            行動タグと状態タグの追加・非表示を設定できます。
           </Text>
-          <Pressable
-            style={styles.linkButton}
-            onPress={() => router.push('./tags')}
-          >
+          <Pressable style={styles.linkButton} onPress={() => router.push('./tags')}>
             <Text style={styles.linkButtonText}>タグを管理する</Text>
           </Pressable>
         </SectionCard>
 
-        <SectionCard title="データ管理">
+        <SectionCard title="データ削除">
           <Text style={styles.sectionBody}>
-            保存済みの記録をすべて削除します。元に戻せません。
+            保存済みのレビューをすべて削除します。この操作は元に戻せません。
           </Text>
-
           <Pressable
-            style={[styles.dangerButton, isClearing && { opacity: 0.6 }]}
+            style={[styles.dangerButton, isClearing && styles.disabledButton]}
             disabled={isClearing}
             onPress={() =>
               Alert.alert(
                 'すべての記録を削除しますか？',
-                'この操作は取り消せません。',
+                'この操作は元に戻せません。',
                 [
                   { text: 'キャンセル', style: 'cancel' },
                   {
@@ -364,7 +376,7 @@ function TimeAdjuster({
       <Text style={styles.timeAdjusterLabel}>{label}</Text>
       <View style={styles.timeAdjusterRow}>
         <Pressable
-          style={[styles.timeAdjustButton, disabled && { opacity: 0.5 }]}
+          style={[styles.timeAdjustButton, disabled && styles.disabledButton]}
           onPress={onMinus}
           disabled={disabled}
         >
@@ -374,7 +386,7 @@ function TimeAdjuster({
           <Text style={styles.timeValueText}>{value}</Text>
         </View>
         <Pressable
-          style={[styles.timeAdjustButton, disabled && { opacity: 0.5 }]}
+          style={[styles.timeAdjustButton, disabled && styles.disabledButton]}
           onPress={onPlus}
           disabled={disabled}
         >
@@ -473,22 +485,20 @@ function isCancelledFilePick(error: unknown) {
   return error instanceof Error && /cancel/i.test(error.message);
 }
 
-function buildImportResultMessage(
-  importedCount: number,
-  issues: { rowNumber: number; reason: string }[]
-) {
-  const issueLines = issues
-    .filter((item) => item.reason)
-    .slice(0, 5)
+function buildImportResultMessage(summary: ImportSummary) {
+  const detailLines = summary.details
     .map((item) =>
       item.rowNumber > 0 ? `${item.rowNumber} 行目: ${item.reason}` : item.reason
-    );
+    )
+    .slice(0, 6);
 
   return [
-    `${importedCount} 件を取り込みました。`,
-    issues.length > 0 ? `${issues.length} 件はスキップされています。` : 'スキップはありません。',
-    issueLines.length > 0 ? '' : null,
-    ...issueLines,
+    `読み込み件数: ${summary.readCount}件`,
+    `追加件数: ${summary.addedCount}件`,
+    `スキップ件数: ${summary.skippedCount}件`,
+    `エラー件数: ${summary.errorCount}件`,
+    detailLines.length > 0 ? '' : null,
+    ...detailLines,
   ]
     .filter(Boolean)
     .join('\n');
@@ -553,6 +563,9 @@ const styles = StyleSheet.create({
     ...theme.typography.body,
     color: theme.colors.textMuted,
     marginBottom: theme.spacing.lg,
+  },
+  flexFill: {
+    flex: 1,
   },
   toggleRow: {
     flexDirection: 'row',
@@ -684,5 +697,8 @@ const styles = StyleSheet.create({
     ...theme.typography.body,
     color: theme.colors.danger,
     fontWeight: '700',
+  },
+  disabledButton: {
+    opacity: 0.6,
   },
 });

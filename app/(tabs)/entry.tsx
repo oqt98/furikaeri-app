@@ -317,9 +317,9 @@ export default function EntryScreen() {
   }
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
+    <ScrollView testID="screen-entry" contentContainerStyle={styles.container}>
       <View style={styles.headerRow}>
-        <Pressable style={styles.backButton} onPress={() => router.back()}>
+        <Pressable testID="entry-back-button" style={styles.backButton} onPress={() => router.back()}>
           <Ionicons name="chevron-back" size={18} color={theme.colors.primaryDark} />
         </Pressable>
         <View style={styles.headerText}>
@@ -430,7 +430,7 @@ export default function EntryScreen() {
       <Section title="写真">
         <View style={styles.photoHeaderRow}>
           <Text style={styles.helperText}>最大 6 枚。コメント付きで並び替えできます。</Text>
-          <Pressable style={styles.secondaryButton} onPress={handlePickImage}>
+          <Pressable testID="entry-pick-image-button" style={styles.secondaryButton} onPress={handlePickImage}>
             <Ionicons name="image-outline" size={16} color={theme.colors.primaryDark} />
             <Text style={styles.secondaryButtonText}>写真を追加</Text>
           </Pressable>
@@ -467,6 +467,7 @@ export default function EntryScreen() {
                     </Pressable>
                   </View>
                   <TextInput
+                    testID={`photo-comment-${item.id}`}
                     style={[styles.input, styles.photoCommentInput]}
                     placeholder="写真コメント"
                     placeholderTextColor={theme.colors.textSoft}
@@ -558,6 +559,7 @@ export default function EntryScreen() {
       {selectedTemplate.fields.map((field) => (
         <Section key={field.key} title={field.label}>
           <TextInput
+            testID={`field-${field.key}`}
             style={[styles.input, field.multiline && styles.textarea]}
             placeholder={field.label}
             placeholderTextColor={theme.colors.textSoft}
@@ -574,7 +576,7 @@ export default function EntryScreen() {
         </Section>
       ))}
 
-      <Pressable style={styles.saveButton} onPress={handleSave}>
+      <Pressable testID="entry-save-button" style={styles.saveButton} onPress={handleSave}>
         <Text style={styles.saveButtonText}>{isEditMode ? '更新する' : '保存する'}</Text>
       </Pressable>
     </ScrollView>
