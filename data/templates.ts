@@ -5,11 +5,11 @@ export type TemplateField = {
 };
 
 export type TemplateMode =
-  | 'さくっと記録'
-  | '感情を整理'
-  | '学びを残す'
-  | '問題を整理'
-  | '未来を考える';
+  | 'さっと記録'
+  | '気づきを残す'
+  | '学びを振り返る'
+  | '次につなげる'
+  | '視点を変えて見る';
 
 export type ReviewTemplate = {
   id: string;
@@ -22,19 +22,19 @@ export type ReviewTemplate = {
 export const templates: ReviewTemplate[] = [
   {
     id: 'diary',
-    name: '一言日記',
-    description: '軽く1日を残したいとき',
-    mode: 'さくっと記録',
+    name: 'ひとことメモ',
+    description: 'その日の出来事を短く書きたいとき向け。',
+    mode: 'さっと記録',
     fields: [
-      { key: 'title', label: '今日の一言タイトル' },
-      { key: 'memo', label: '本文', multiline: true },
+      { key: 'title', label: '今日のひとこと' },
+      { key: 'memo', label: 'メモ', multiline: true },
     ],
   },
   {
     id: 'kpt',
     name: 'KPT',
-    description: '継続・課題・次アクションを整理する',
-    mode: '問題を整理',
+    description: '続けたいこと、困ったこと、次に試すことを整理する。',
+    mode: '次につなげる',
     fields: [
       { key: 'keep', label: 'Keep', multiline: true },
       { key: 'problem', label: 'Problem', multiline: true },
@@ -44,8 +44,8 @@ export const templates: ReviewTemplate[] = [
   {
     id: 'ywt',
     name: 'YWT',
-    description: 'やったこと・わかったこと・次にやること',
-    mode: '学びを残す',
+    description: 'やったこと、わかったこと、次にやることをまとめる。',
+    mode: '学びを振り返る',
     fields: [
       { key: 'yatta', label: 'やったこと', multiline: true },
       { key: 'wakatta', label: 'わかったこと', multiline: true },
@@ -55,65 +55,65 @@ export const templates: ReviewTemplate[] = [
   {
     id: 'good3',
     name: 'よかったこと3つ',
-    description: '前向きに1日を終えたいとき',
-    mode: '感情を整理',
+    description: '小さな前向きさを3つだけ残したい日に。',
+    mode: '気づきを残す',
     fields: [
-      { key: 'good1', label: 'よかったこと1', multiline: true },
-      { key: 'good2', label: 'よかったこと2', multiline: true },
-      { key: 'good3', label: 'よかったこと3', multiline: true },
+      { key: 'good1', label: 'よかったこと 1', multiline: true },
+      { key: 'good2', label: 'よかったこと 2', multiline: true },
+      { key: 'good3', label: 'よかったこと 3', multiline: true },
     ],
   },
   {
     id: 'ssc',
     name: 'Start / Stop / Continue',
-    description: '始める・やめる・続けるを整理したいとき',
-    mode: '未来を考える',
+    description: '始める、やめる、続けるをシンプルに見直す。',
+    mode: '次につなげる',
     fields: [
-      { key: 'start', label: 'Start（これから始めたいこと）', multiline: true },
-      { key: 'stop', label: 'Stop（やめたいこと）', multiline: true },
-      { key: 'continue', label: 'Continue（続けたいこと）', multiline: true },
+      { key: 'start', label: 'Start', multiline: true },
+      { key: 'stop', label: 'Stop', multiline: true },
+      { key: 'continue', label: 'Continue', multiline: true },
     ],
   },
   {
     id: '4ls',
     name: '4Ls',
-    description: '良かったことと学びをバランスよく振り返る',
-    mode: '学びを残す',
+    description: 'Liked / Learned / Lacked / Longed for で整理する。',
+    mode: '学びを振り返る',
     fields: [
-      { key: 'liked', label: 'Liked（よかったこと）', multiline: true },
-      { key: 'learned', label: 'Learned（学んだこと）', multiline: true },
-      { key: 'lacked', label: 'Lacked（足りなかったこと）', multiline: true },
-      { key: 'longedFor', label: 'Longed for（欲しかったこと）', multiline: true },
+      { key: 'liked', label: 'Liked', multiline: true },
+      { key: 'learned', label: 'Learned', multiline: true },
+      { key: 'lacked', label: 'Lacked', multiline: true },
+      { key: 'longedFor', label: 'Longed for', multiline: true },
     ],
   },
   {
     id: 'rose-thorn-bud',
     name: 'Rose / Thorn / Bud',
-    description: '良いこと・つらいこと・これからの芽を見つける',
-    mode: '感情を整理',
+    description: 'よかったこと、つらかったこと、芽が出そうなことを見る。',
+    mode: '視点を変えて見る',
     fields: [
-      { key: 'rose', label: 'Rose（よかったこと）', multiline: true },
-      { key: 'thorn', label: 'Thorn（つらかったこと）', multiline: true },
-      { key: 'bud', label: 'Bud（これから育てたいこと）', multiline: true },
+      { key: 'rose', label: 'Rose', multiline: true },
+      { key: 'thorn', label: 'Thorn', multiline: true },
+      { key: 'bud', label: 'Bud', multiline: true },
     ],
   },
   {
     id: 'sailboat',
     name: 'Sailboat',
-    description: '追い風・足かせ・目標・リスクを整理する',
-    mode: '未来を考える',
+    description: '進みを助けたことと妨げたことを俯瞰する。',
+    mode: '視点を変えて見る',
     fields: [
-      { key: 'wind', label: '追い風だったこと', multiline: true },
-      { key: 'anchor', label: '足を引っ張ったこと', multiline: true },
-      { key: 'island', label: '向かいたい先・目標', multiline: true },
-      { key: 'risk', label: '不安・リスク', multiline: true },
+      { key: 'wind', label: '追い風', multiline: true },
+      { key: 'anchor', label: '足かせ', multiline: true },
+      { key: 'island', label: '目指したい場所', multiline: true },
+      { key: 'risk', label: '気になったこと', multiline: true },
     ],
   },
   {
     id: 'starfish',
     name: 'Starfish',
-    description: 'やる量や行動を細かく見直したいとき',
-    mode: '問題を整理',
+    description: '増やす、減らす、続ける、やめる、始めるを並べる。',
+    mode: '次につなげる',
     fields: [
       { key: 'more', label: 'もっとやること', multiline: true },
       { key: 'less', label: '減らしたいこと', multiline: true },
@@ -125,12 +125,12 @@ export const templates: ReviewTemplate[] = [
   {
     id: 'glad-sad-mad',
     name: 'Glad / Sad / Mad',
-    description: '感情ベースで素直に振り返りたいとき',
-    mode: '感情を整理',
+    description: '感情の切り口で1日を短く振り返る。',
+    mode: '気づきを残す',
     fields: [
-      { key: 'glad', label: 'Glad（うれしかったこと）', multiline: true },
-      { key: 'sad', label: 'Sad（悲しかったこと）', multiline: true },
-      { key: 'mad', label: 'Mad（イラッとしたこと）', multiline: true },
+      { key: 'glad', label: 'Glad', multiline: true },
+      { key: 'sad', label: 'Sad', multiline: true },
+      { key: 'mad', label: 'Mad', multiline: true },
     ],
   },
 ];

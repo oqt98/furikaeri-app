@@ -1,3 +1,4 @@
+import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
 import {
@@ -11,42 +12,49 @@ import {
   View,
 } from 'react-native';
 import SwipeTabPage from '../../components/SwipeTabPage';
+import {
+  CATEGORY_FILTER_OPTIONS,
+  getMoodOption,
+  type CategoryFilterOption,
+} from '../../data/reviewOptions';
 import { templates } from '../../data/templates';
 import {
   deleteReview,
   getReviews,
-  ReviewItem,
+  getTagCatalog,
   toggleFavoriteReview,
+  type ReviewItem,
 } from '../../lib/storage';
-
-const CATEGORY_OPTIONS = ['すべて', '仕事', 'プラベ'] as const;
-
-type CategoryFilter = (typeof CATEGORY_OPTIONS)[number];
+import { cardShadow, theme } from '../../lib/theme';
 
 export default function HistoryScreen() {
   const [reviews, setReviews] = useState<ReviewItem[]>([]);
   const [selectedCategory, setSelectedCategory] =
-    useState<CategoryFilter>('すべて');
-  const [selectedTemplate, setSelectedTemplate] = useState<string>('すべて');
+    useState<CategoryFilterOption>('すべて');
+  const [selectedTemplate, setSelectedTemplate] = useState('すべて');
   const [searchText, setSearchText] = useState('');
+  const [favoritesOnly, setFavoritesOnly] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [favoriteLoadingId, setFavoriteLoadingId] = useState<string | null>(null);
+  const [tagLabelMap, setTagLabelMap] = useState<Map<string, string>>(new Map());
 
-  const templateOptions = useMemo(() => {
-    return ['すべて', ...templates.map((template) => template.name)];
-  }, []);
+  const templateOptions = useMemo(
+    () => ['すべて', ...templates.map((template) => template.name)],
+    []
+  );
 
   const loadReviews = async () => {
-    const data = await getReviews();
+    const [data, tagCatalog] = await Promise.all([getReviews(), getTagCatalog()]);
+    setTagLabelMap(
+      new Map(
+        [...tagCatalog.action, ...tagCatalog.state].map((tag) => [tag.id, tag.label])
+      )
+    );
 
     const sorted = [...data].sort((a, b) => {
       const favoriteA = a.isFavorite ? 1 : 0;
       const favoriteB = b.isFavorite ? 1 : 0;
-
-      if (favoriteA !== favoriteB) {
-        return favoriteB - favoriteA;
-      }
-
+      if (favoriteA !== favoriteB) return favoriteB - favoriteA;
       return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
     });
 
@@ -65,103 +73,48 @@ export default function HistoryScreen() {
     return reviews.filter((item) => {
       const categoryMatch =
         selectedCategory === 'すべて' || item.category === selectedCategory;
-
       const templateMatch =
-        selectedTemplate === 'すべて' ||
-        item.templateName === selectedTemplate;
+        selectedTemplate === 'すべて' || item.templateName === selectedTemplate;
+      const favoriteMatch = !favoritesOnly || item.isFavorite;
 
-      const answerText = Object.values(item.answers ?? {})
+      const labels = [
+        ...item.actionTagIds.map((id) => tagLabelMap.get(id) ?? ''),
+        ...item.stateTagIds.map((id) => tagLabelMap.get(id) ?? ''),
+      ];
+      const searchPool = [
+        item.templateName,
+        item.category,
+        item.mood ? getMoodOption(item.mood).label : '',
+        ...labels,
+        ...item.photos.map((photo) => photo.comment),
+        ...Object.values(item.answers ?? {}),
+      ]
         .join(' ')
         .toLowerCase();
 
-      const tagsText = (item.tags ?? []).join(' ').toLowerCase();
-
-      const moodText = (item.mood ?? '').toLowerCase();
-      const templateText = (item.templateName ?? '').toLowerCase();
-      const categoryText = (item.category ?? '').toLowerCase();
-
-      const searchMatch =
-        keyword === '' ||
-        answerText.includes(keyword) ||
-        tagsText.includes(keyword) ||
-        moodText.includes(keyword) ||
-        templateText.includes(keyword) ||
-        categoryText.includes(keyword);
-
-      return categoryMatch && templateMatch && searchMatch;
+      const searchMatch = keyword === '' || searchPool.includes(keyword);
+      return categoryMatch && templateMatch && favoriteMatch && searchMatch;
     });
-  }, [reviews, searchText, selectedCategory, selectedTemplate]);
-
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleString('ja-JP');
-  };
-
-  const getPreviewAnswers = (answers: Record<string, string>) => {
-    const entries = Object.entries(answers).filter(
-      ([, value]) => value && value.trim() !== ''
-    );
-
-    return entries.slice(0, 2);
-  };
-
-  const truncateText = (text: string, maxLength = 48) => {
-    if (!text) return '（未入力）';
-    return text.length > maxLength ? `${text.slice(0, maxLength)}...` : text;
-  };
-
-  const getCategoryBadgeStyle = (category: '仕事' | 'プラベ') => {
-    return category === '仕事' ? styles.workBadge : styles.privateBadge;
-  };
-
-  const isSelectedCategory = (value: CategoryFilter) =>
-    selectedCategory === value;
-
-  const isSelectedTemplate = (value: string) =>
-    selectedTemplate === value;
-
-  const hasSavedReviews = reviews.length > 0;
-  const hasFilteredReviews = filteredReviews.length > 0;
+  }, [favoritesOnly, reviews, searchText, selectedCategory, selectedTemplate, tagLabelMap]);
 
   const handleEdit = (item: ReviewItem) => {
     router.push({
       pathname: '/entry',
-      params: {
-        reviewId: item.id,
-      },
+      params: { reviewId: item.id },
     });
   };
 
-  const executeDelete = async (id: string) => {
+  const handleDelete = async (id: string) => {
     try {
       setDeletingId(id);
       await deleteReview(id);
       await loadReviews();
     } catch (error) {
-      console.error('delete failed:', error);
-      Alert.alert('削除に失敗しました', '時間をおいてもう一度お試しください。');
+      console.error(error);
+      Alert.alert('削除に失敗しました');
     } finally {
       setDeletingId(null);
     }
-  };
-
-  const confirmDelete = (item: ReviewItem) => {
-    Alert.alert(
-      'この振り返りを削除しますか？',
-      `「${item.templateName}」を削除します。`,
-      [
-        {
-          text: 'キャンセル',
-          style: 'cancel',
-        },
-        {
-          text: '削除する',
-          style: 'destructive',
-          onPress: () => {
-            void executeDelete(item.id);
-          },
-        },
-      ]
-    );
   };
 
   const handleToggleFavorite = async (item: ReviewItem) => {
@@ -170,11 +123,8 @@ export default function HistoryScreen() {
       await toggleFavoriteReview(item.id);
       await loadReviews();
     } catch (error) {
-      console.error('toggle favorite failed:', error);
-      Alert.alert(
-        'お気に入り更新に失敗しました',
-        '時間をおいてもう一度お試しください。'
-      );
+      console.error(error);
+      Alert.alert('お気に入り更新に失敗しました');
     } finally {
       setFavoriteLoadingId(null);
     }
@@ -183,107 +133,101 @@ export default function HistoryScreen() {
   return (
     <SwipeTabPage tabKey="history">
       <ScrollView contentContainerStyle={styles.container}>
-        <Text style={styles.title}>履歴</Text>
-        <Text style={styles.subtitle}>これまでの振り返り一覧</Text>
-
-        <TextInput
-          style={styles.searchInput}
-          value={searchText}
-          onChangeText={setSearchText}
-          placeholder="検索（本文 / タグ / 気分 / テンプレ）"
-          placeholderTextColor="#94a3b8"
-        />
-
-        <Pressable style={styles.reloadButton} onPress={loadReviews}>
-          <Text style={styles.reloadButtonText}>再読み込み</Text>
-        </Pressable>
-
-        <View style={styles.filterSection}>
-          <Text style={styles.filterLabel}>カテゴリ</Text>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.filterScrollContent}
-          >
-            {CATEGORY_OPTIONS.map((option) => (
-              <Pressable
-                key={option}
-                style={[
-                  styles.filterChip,
-                  isSelectedCategory(option) && styles.filterChipActive,
-                ]}
-                onPress={() => setSelectedCategory(option)}
-              >
-                <Text
-                  style={[
-                    styles.filterChipText,
-                    isSelectedCategory(option) && styles.filterChipTextActive,
-                  ]}
-                >
-                  {option}
-                </Text>
-              </Pressable>
-            ))}
-          </ScrollView>
-        </View>
-
-        <View style={styles.filterSection}>
-          <Text style={styles.filterLabel}>テンプレ</Text>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.filterScrollContent}
-          >
-            {templateOptions.map((option) => (
-              <Pressable
-                key={option}
-                style={[
-                  styles.filterChip,
-                  isSelectedTemplate(option) && styles.filterChipActive,
-                ]}
-                onPress={() => setSelectedTemplate(option)}
-              >
-                <Text
-                  style={[
-                    styles.filterChipText,
-                    isSelectedTemplate(option) && styles.filterChipTextActive,
-                  ]}
-                >
-                  {option}
-                </Text>
-              </Pressable>
-            ))}
-          </ScrollView>
-        </View>
-
-        <Text style={styles.resultCount}>
-          {hasSavedReviews
-            ? `表示件数: ${filteredReviews.length}件 / 全${reviews.length}件`
-            : '表示件数: 0件'}
+        <Text style={styles.title}>一覧</Text>
+        <Text style={styles.subtitle}>
+          お気に入りやタグ、キーワードで絞り込みながら見返せます。
         </Text>
 
-        {!hasSavedReviews ? (
-          <View style={styles.emptyCard}>
-            <Text style={styles.emptyText}>まだ保存された振り返りはありません。</Text>
+        <View style={styles.searchCard}>
+          <View style={styles.searchRow}>
+            <Ionicons name="search-outline" size={18} color={theme.colors.textSoft} />
+            <TextInput
+              style={styles.searchInput}
+              value={searchText}
+              onChangeText={setSearchText}
+              placeholder="キーワード検索"
+              placeholderTextColor={theme.colors.textSoft}
+            />
           </View>
-        ) : !hasFilteredReviews ? (
-          <View style={styles.emptyCard}>
-            <Text style={styles.emptyText}>
-              該当する振り返りがありません。
-            </Text>
+
+          <View style={styles.topActions}>
+            <Pressable
+              style={[styles.favoriteFilter, favoritesOnly && styles.favoriteFilterActive]}
+              onPress={() => setFavoritesOnly((value) => !value)}
+            >
+              <Ionicons
+                name={favoritesOnly ? 'heart' : 'heart-outline'}
+                size={16}
+                color={favoritesOnly ? theme.colors.white : theme.colors.danger}
+              />
+              <Text
+                style={[
+                  styles.favoriteFilterText,
+                  favoritesOnly && styles.favoriteFilterTextActive,
+                ]}
+              >
+                お気に入りのみ
+              </Text>
+            </Pressable>
+
+            <Pressable style={styles.reloadButton} onPress={loadReviews}>
+              <Ionicons name="refresh-outline" size={16} color={theme.colors.primaryDark} />
+              <Text style={styles.reloadButtonText}>更新</Text>
+            </Pressable>
           </View>
+        </View>
+
+        <FilterSection
+          label="カテゴリ"
+          options={CATEGORY_FILTER_OPTIONS as readonly string[]}
+          selected={selectedCategory}
+          onSelect={setSelectedCategory}
+        />
+        <FilterSection
+          label="テンプレート"
+          options={templateOptions}
+          selected={selectedTemplate}
+          onSelect={setSelectedTemplate}
+        />
+
+        <Text style={styles.resultCount}>
+          {filteredReviews.length}件 / 全{reviews.length}件
+        </Text>
+
+        {reviews.length === 0 ? (
+          <EmptyState
+            title="まだ記録がありません"
+            body="最初の 1 件を作成すると、ここから見返せるようになります。"
+          />
+        ) : filteredReviews.length === 0 ? (
+          <EmptyState
+            title="条件に合う記録がありません"
+            body="検索条件を少しゆるめると見つかるかもしれません。"
+          />
         ) : (
           filteredReviews.map((item) => {
-            const previewAnswers = getPreviewAnswers(item.answers);
+            const previewAnswers = Object.entries(item.answers ?? {})
+              .filter(([, value]) => value.trim())
+              .slice(0, 2);
+            const actionLabels = item.actionTagIds
+              .map((id) => tagLabelMap.get(id))
+              .filter(Boolean) as string[];
+            const stateLabels = item.stateTagIds
+              .map((id) => tagLabelMap.get(id))
+              .filter(Boolean) as string[];
             const isDeleting = deletingId === item.id;
             const isFavoriteLoading = favoriteLoadingId === item.id;
+            const firstPhoto = item.photos[0];
+            const mood = item.mood ? getMoodOption(item.mood) : null;
 
             return (
               <View key={item.id} style={styles.card}>
-                <View style={styles.cardHeaderRow}>
-                  <View style={styles.cardHeaderTextArea}>
+                <View style={styles.cardHeader}>
+                  <View style={styles.cardHeaderText}>
                     <Text style={styles.cardTitle}>{item.templateName}</Text>
-                    <Text style={styles.date}>{formatDate(item.createdAt)}</Text>
+                    <Text style={styles.cardDate}>
+                      {new Date(item.createdAt).toLocaleString('ja-JP')}
+                    </Text>
                   </View>
 
                   <Pressable
@@ -291,44 +235,31 @@ export default function HistoryScreen() {
                     onPress={() => handleToggleFavorite(item)}
                     disabled={isFavoriteLoading}
                   >
-                    <Text style={styles.favoriteButtonText}>
-                      {item.isFavorite ? '★' : '☆'}
-                    </Text>
+                    <Ionicons
+                      name={item.isFavorite ? 'heart' : 'heart-outline'}
+                      size={18}
+                      color={theme.colors.danger}
+                    />
                   </Pressable>
                 </View>
 
-                <View style={styles.badgeRow}>
-                  <View
-                    style={[
-                      styles.categoryBadge,
-                      getCategoryBadgeStyle(item.category),
-                    ]}
-                  >
-                    <Text style={styles.categoryBadgeText}>
-                      {item.category}
-                    </Text>
-                  </View>
-
-                  {item.mood ? (
-                    <View style={styles.moodBadge}>
-                      <Text style={styles.moodBadgeText}>{item.mood}</Text>
-                    </View>
+                <View style={styles.metaRow}>
+                  <Badge label={item.category} tone="primary" />
+                  {mood ? (
+                    <Badge label={`${mood.emoji} ${mood.label}`} tone="muted" />
                   ) : null}
                 </View>
 
-                {item.tags && item.tags.length > 0 ? (
-                  <View style={styles.tagsContainer}>
-                    {item.tags.map((tag) => (
-                      <View key={`${item.id}-${tag}`} style={styles.tagChip}>
-                        <Text style={styles.tagText}>{tag}</Text>
-                      </View>
-                    ))}
-                  </View>
+                {actionLabels.length > 0 ? (
+                  <TagGroup label="行動タグ" values={actionLabels} />
+                ) : null}
+                {stateLabels.length > 0 ? (
+                  <TagGroup label="状態タグ" values={stateLabels} />
                 ) : null}
 
-                {item.photoUri ? (
+                {firstPhoto ? (
                   <Image
-                    source={{ uri: item.photoUri }}
+                    source={{ uri: firstPhoto.uri }}
                     style={styles.thumbnail}
                     resizeMode="cover"
                   />
@@ -339,38 +270,36 @@ export default function HistoryScreen() {
                     previewAnswers.map(([key, value]) => (
                       <View key={key} style={styles.answerBlock}>
                         <Text style={styles.answerKey}>{key}</Text>
-                        <Text style={styles.answerValue}>
-                          {truncateText(value)}
-                        </Text>
+                        <Text style={styles.answerValue}>{truncate(value, 56)}</Text>
                       </View>
                     ))
                   ) : (
-                    <Text style={styles.noAnswerText}>
-                      未入力の振り返りです。
-                    </Text>
+                    <Text style={styles.emptyPreviewText}>本文は未入力です。</Text>
                   )}
                 </View>
 
-                {item.updatedAt ? (
-                  <Text style={styles.updatedAt}>
-                    更新: {formatDate(item.updatedAt)}
-                  </Text>
-                ) : null}
-
                 <View style={styles.actionRow}>
-                  <Pressable
-                    style={styles.editButton}
-                    onPress={() => handleEdit(item)}
-                  >
+                  <Pressable style={styles.editButton} onPress={() => handleEdit(item)}>
                     <Text style={styles.editButtonText}>編集</Text>
                   </Pressable>
-
                   <Pressable
-                    style={[
-                      styles.deleteButton,
-                      isDeleting && styles.deleteButtonDisabled,
-                    ]}
-                    onPress={() => confirmDelete(item)}
+                    style={[styles.deleteButton, isDeleting && { opacity: 0.6 }]}
+                    onPress={() =>
+                      Alert.alert(
+                        'この記録を削除しますか？',
+                        `${item.templateName} を削除します。`,
+                        [
+                          { text: 'キャンセル', style: 'cancel' },
+                          {
+                            text: '削除する',
+                            style: 'destructive',
+                            onPress: () => {
+                              void handleDelete(item.id);
+                            },
+                          },
+                        ]
+                      )
+                    }
                     disabled={isDeleting}
                   >
                     <Text style={styles.deleteButtonText}>
@@ -387,264 +316,365 @@ export default function HistoryScreen() {
   );
 }
 
+function FilterSection({
+  label,
+  options,
+  selected,
+  onSelect,
+}: {
+  label: string;
+  options: readonly string[];
+  selected: string;
+  onSelect: (value: any) => void;
+}) {
+  return (
+    <View style={styles.filterSection}>
+      <Text style={styles.filterLabel}>{label}</Text>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.filterScroll}
+      >
+        {options.map((option) => {
+          const active = option === selected;
+          return (
+            <Pressable
+              key={option}
+              style={[styles.filterChip, active && styles.filterChipActive]}
+              onPress={() => onSelect(option)}
+            >
+              <Text style={[styles.filterChipText, active && styles.filterChipTextActive]}>
+                {option}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </ScrollView>
+    </View>
+  );
+}
+
+function EmptyState({ title, body }: { title: string; body: string }) {
+  return (
+    <View style={styles.emptyCard}>
+      <View style={styles.emptyIcon}>
+        <Ionicons name="trail-sign-outline" size={20} color={theme.colors.primaryDark} />
+      </View>
+      <Text style={styles.emptyTitle}>{title}</Text>
+      <Text style={styles.emptyText}>{body}</Text>
+    </View>
+  );
+}
+
+function Badge({
+  label,
+  tone,
+}: {
+  label: string;
+  tone: 'primary' | 'muted' | 'soft';
+}) {
+  const badgeStyle =
+    tone === 'primary'
+      ? styles.badgePrimary
+      : tone === 'muted'
+        ? styles.badgeMuted
+        : styles.badgeSoft;
+
+  return (
+    <View style={[styles.badge, badgeStyle]}>
+      <Text style={styles.badgeText}>{label}</Text>
+    </View>
+  );
+}
+
+function TagGroup({ label, values }: { label: string; values: string[] }) {
+  return (
+    <View style={styles.tagGroup}>
+      <Text style={styles.tagGroupLabel}>{label}</Text>
+      <View style={styles.tagsRow}>
+        {values.map((tag) => (
+          <Badge key={`${label}-${tag}`} label={tag} tone="soft" />
+        ))}
+      </View>
+    </View>
+  );
+}
+
+function truncate(value: string, maxLength: number) {
+  return value.length > maxLength ? `${value.slice(0, maxLength)}...` : value;
+}
+
 const styles = StyleSheet.create({
   container: {
     flexGrow: 1,
-    backgroundColor: '#f7f8fa',
-    padding: 20,
+    backgroundColor: theme.colors.background,
+    padding: theme.spacing.xl,
     paddingBottom: 120,
   },
   title: {
-    fontSize: 28,
-    fontWeight: '700',
-    marginTop: 12,
-    marginBottom: 8,
-    color: '#111',
+    ...theme.typography.title,
+    color: theme.colors.text,
+    marginTop: theme.spacing.md,
+    marginBottom: theme.spacing.sm,
   },
   subtitle: {
-    fontSize: 14,
-    color: '#666',
-    marginBottom: 16,
+    ...theme.typography.body,
+    color: theme.colors.textMuted,
+    marginBottom: theme.spacing.xl,
+  },
+  searchCard: {
+    ...cardShadow,
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.radius.lg,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    padding: theme.spacing.md,
+    marginBottom: theme.spacing.lg,
+  },
+  searchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+    backgroundColor: theme.colors.surfaceMuted,
+    borderRadius: theme.radius.md,
+    paddingHorizontal: theme.spacing.md,
+    marginBottom: theme.spacing.sm,
   },
   searchInput: {
-    backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: '#d9dfe7',
-    borderRadius: 12,
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    fontSize: 14,
-    color: '#111',
-    marginBottom: 14,
+    flex: 1,
+    height: 46,
+    color: theme.colors.text,
+    fontSize: 15,
+  },
+  topActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: theme.spacing.sm,
+  },
+  favoriteFilter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+    backgroundColor: theme.colors.dangerSoft,
+    borderRadius: theme.radius.pill,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: 8,
+  },
+  favoriteFilterActive: {
+    backgroundColor: theme.colors.danger,
+  },
+  favoriteFilterText: {
+    ...theme.typography.caption,
+    color: theme.colors.danger,
+  },
+  favoriteFilterTextActive: {
+    color: theme.colors.white,
   },
   reloadButton: {
-    backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: '#d9dfe7',
-    borderRadius: 10,
-    paddingVertical: 10,
+    flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 16,
+    gap: theme.spacing.xs,
+    backgroundColor: theme.colors.primarySoft,
+    borderRadius: theme.radius.pill,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: 8,
   },
   reloadButtonText: {
-    fontWeight: '700',
-    color: '#111',
+    ...theme.typography.caption,
+    color: theme.colors.primaryDark,
   },
   filterSection: {
-    marginBottom: 14,
+    marginBottom: theme.spacing.lg,
   },
   filterLabel: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#444',
-    marginBottom: 8,
+    ...theme.typography.caption,
+    color: theme.colors.textMuted,
+    marginBottom: theme.spacing.sm,
   },
-  filterScrollContent: {
-    paddingRight: 8,
+  filterScroll: {
+    paddingRight: theme.spacing.sm,
   },
   filterChip: {
-    backgroundColor: '#fff',
+    backgroundColor: theme.colors.surface,
     borderWidth: 1,
-    borderColor: '#d9dfe7',
-    borderRadius: 999,
-    paddingVertical: 8,
-    paddingHorizontal: 14,
-    marginRight: 8,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.pill,
+    paddingVertical: 9,
+    paddingHorizontal: theme.spacing.md,
+    marginRight: theme.spacing.sm,
   },
   filterChipActive: {
-    backgroundColor: '#2f6fed',
-    borderColor: '#2f6fed',
+    backgroundColor: theme.colors.primary,
+    borderColor: theme.colors.primary,
   },
   filterChipText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#333',
+    ...theme.typography.caption,
+    color: theme.colors.textMuted,
   },
   filterChipTextActive: {
-    color: '#fff',
+    color: theme.colors.white,
   },
   resultCount: {
-    fontSize: 12,
-    color: '#666',
-    marginBottom: 14,
+    ...theme.typography.caption,
+    color: theme.colors.textSoft,
+    marginBottom: theme.spacing.md,
   },
   emptyCard: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 16,
+    ...cardShadow,
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.radius.xl,
     borderWidth: 1,
-    borderColor: '#e3e6eb',
+    borderColor: theme.colors.border,
+    padding: theme.spacing.xxl,
+    alignItems: 'center',
+  },
+  emptyIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: theme.radius.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: theme.colors.primarySoft,
+    marginBottom: theme.spacing.md,
+  },
+  emptyTitle: {
+    ...theme.typography.section,
+    color: theme.colors.text,
+    marginBottom: theme.spacing.sm,
   },
   emptyText: {
-    color: '#666',
-    fontSize: 14,
+    ...theme.typography.body,
+    color: theme.colors.textMuted,
+    textAlign: 'center',
   },
   card: {
-    backgroundColor: '#fff',
-    borderRadius: 14,
-    padding: 16,
-    marginBottom: 12,
+    ...cardShadow,
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.radius.xl,
     borderWidth: 1,
-    borderColor: '#e3e6eb',
+    borderColor: theme.colors.border,
+    padding: theme.spacing.xl,
+    marginBottom: theme.spacing.md,
   },
-  cardHeaderRow: {
+  cardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: 8,
+    gap: theme.spacing.md,
+    marginBottom: theme.spacing.md,
   },
-  cardHeaderTextArea: {
+  cardHeaderText: {
     flex: 1,
-    paddingRight: 12,
   },
   cardTitle: {
-    fontSize: 17,
+    fontSize: 18,
     fontWeight: '700',
+    color: theme.colors.text,
     marginBottom: 6,
-    color: '#111',
+  },
+  cardDate: {
+    ...theme.typography.caption,
+    color: theme.colors.textSoft,
   },
   favoriteButton: {
     width: 38,
     height: 38,
-    borderRadius: 999,
-    backgroundColor: '#fff7ed',
-    borderWidth: 1,
-    borderColor: '#fed7aa',
-    justifyContent: 'center',
+    borderRadius: theme.radius.pill,
     alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: theme.colors.dangerSoft,
   },
-  favoriteButtonText: {
-    fontSize: 22,
-    color: '#f59e0b',
-    fontWeight: '700',
-  },
-  badgeRow: {
+  metaRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
-    marginBottom: 12,
+    gap: theme.spacing.sm,
+    marginBottom: theme.spacing.sm,
   },
-  categoryBadge: {
-    alignSelf: 'flex-start',
-    paddingVertical: 5,
-    paddingHorizontal: 10,
-    borderRadius: 999,
+  tagGroup: {
+    marginBottom: theme.spacing.md,
   },
-  workBadge: {
-    backgroundColor: '#eef4ff',
+  tagGroupLabel: {
+    ...theme.typography.caption,
+    color: theme.colors.textSoft,
+    marginBottom: theme.spacing.xs,
   },
-  privateBadge: {
-    backgroundColor: '#fff4ea',
-  },
-  categoryBadgeText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#333',
-  },
-  moodBadge: {
-    alignSelf: 'flex-start',
-    backgroundColor: '#f3f4f6',
-    paddingVertical: 5,
-    paddingHorizontal: 10,
-    borderRadius: 999,
-  },
-  moodBadgeText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#333',
-  },
-  date: {
-    fontSize: 13,
-    color: '#666',
-  },
-  tagsContainer: {
+  tagsRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
-    marginBottom: 12,
+    gap: theme.spacing.sm,
   },
-  tagChip: {
-    backgroundColor: '#f5f7fb',
-    borderWidth: 1,
-    borderColor: '#e1e6ef',
-    borderRadius: 999,
+  badge: {
+    borderRadius: theme.radius.pill,
+    paddingHorizontal: theme.spacing.md,
     paddingVertical: 6,
-    paddingHorizontal: 10,
   },
-  tagText: {
-    fontSize: 12,
-    color: '#333',
-    fontWeight: '600',
+  badgePrimary: {
+    backgroundColor: theme.colors.primarySoft,
+  },
+  badgeMuted: {
+    backgroundColor: theme.colors.surfaceMuted,
+  },
+  badgeSoft: {
+    backgroundColor: theme.colors.backgroundAccent,
+  },
+  badgeText: {
+    ...theme.typography.caption,
+    color: theme.colors.textMuted,
   },
   thumbnail: {
     width: '100%',
     height: 180,
-    borderRadius: 12,
-    marginBottom: 12,
-    backgroundColor: '#eef2f7',
+    borderRadius: theme.radius.lg,
+    marginBottom: theme.spacing.md,
+    backgroundColor: theme.colors.surfaceStrong,
   },
   previewBox: {
-    backgroundColor: '#fafbfc',
-    borderRadius: 10,
-    padding: 12,
+    backgroundColor: theme.colors.surfaceMuted,
+    borderRadius: theme.radius.lg,
+    padding: theme.spacing.md,
     borderWidth: 1,
-    borderColor: '#edf0f4',
+    borderColor: theme.colors.border,
   },
   answerBlock: {
-    marginBottom: 10,
+    marginBottom: theme.spacing.sm,
   },
   answerKey: {
-    fontSize: 12,
-    color: '#666',
+    ...theme.typography.caption,
+    color: theme.colors.textSoft,
     marginBottom: 4,
   },
   answerValue: {
-    fontSize: 14,
-    lineHeight: 20,
-    color: '#111',
+    ...theme.typography.body,
+    color: theme.colors.text,
   },
-  noAnswerText: {
-    color: '#666',
-    fontSize: 14,
-  },
-  updatedAt: {
-    marginTop: 10,
-    fontSize: 12,
-    color: '#888',
+  emptyPreviewText: {
+    ...theme.typography.body,
+    color: theme.colors.textSoft,
   },
   actionRow: {
     flexDirection: 'row',
     justifyContent: 'flex-end',
-    gap: 10,
-    marginTop: 14,
+    gap: theme.spacing.sm,
+    marginTop: theme.spacing.lg,
   },
   editButton: {
-    backgroundColor: '#eef4ff',
-    borderWidth: 1,
-    borderColor: '#bfd3ff',
-    borderRadius: 10,
+    backgroundColor: theme.colors.primarySoft,
+    borderRadius: theme.radius.md,
     paddingVertical: 10,
-    paddingHorizontal: 16,
+    paddingHorizontal: theme.spacing.lg,
   },
   editButtonText: {
-    color: '#1d4ed8',
-    fontSize: 13,
-    fontWeight: '700',
+    ...theme.typography.caption,
+    color: theme.colors.primaryDark,
   },
   deleteButton: {
-    backgroundColor: '#fff1f2',
-    borderWidth: 1,
-    borderColor: '#fecdd3',
-    borderRadius: 10,
+    backgroundColor: theme.colors.dangerSoft,
+    borderRadius: theme.radius.md,
     paddingVertical: 10,
-    paddingHorizontal: 16,
-  },
-  deleteButtonDisabled: {
-    opacity: 0.6,
+    paddingHorizontal: theme.spacing.lg,
   },
   deleteButtonText: {
-    color: '#be123c',
-    fontSize: 13,
-    fontWeight: '700',
+    ...theme.typography.caption,
+    color: theme.colors.danger,
   },
 });

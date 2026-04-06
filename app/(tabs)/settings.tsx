@@ -1,7 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { File } from 'expo-file-system';
 import * as Notifications from 'expo-notifications';
-import { useFocusEffect } from 'expo-router';
-import { useCallback, useMemo, useState } from 'react';
+import { useFocusEffect, useRouter } from 'expo-router';
+import { useCallback, useState } from 'react';
 import {
   Alert,
   Platform,
@@ -10,12 +11,13 @@ import {
   StyleSheet,
   Switch,
   Text,
+  TextInput,
   View,
 } from 'react-native';
 import SwipeTabPage from '../../components/SwipeTabPage';
-import { TAGS } from '../../data/tags';
-import { templates } from '../../data/templates';
-import { clearAllReviews, getReviews, ReviewItem } from '../../lib/storage';
+import { parseNotionCsv } from '../../lib/notionImport';
+import { clearAllReviews, importReviews } from '../../lib/storage';
+import { brand, cardShadow, theme } from '../../lib/theme';
 
 const REMINDER_ENABLED_KEY = 'furikaeri-reminder-enabled';
 const REMINDER_HOUR_KEY = 'furikaeri-reminder-hour';
@@ -32,176 +34,39 @@ Notifications.setNotificationHandler({
 });
 
 export default function SettingsScreen() {
-  const [reviews, setReviews] = useState<ReviewItem[]>([]);
+  const router = useRouter();
   const [isClearing, setIsClearing] = useState(false);
-
   const [reminderEnabled, setReminderEnabled] = useState(false);
   const [reminderHour, setReminderHour] = useState(22);
   const [reminderMinute, setReminderMinute] = useState(0);
+  const [hourInput, setHourInput] = useState('22');
+  const [minuteInput, setMinuteInput] = useState('00');
   const [isSavingReminder, setIsSavingReminder] = useState(false);
-
-  const loadReviews = async () => {
-    const data = await getReviews();
-    setReviews(data);
-  };
-
-  const loadReminderSettings = async () => {
-    try {
-      const [enabledRaw, hourRaw, minuteRaw] = await Promise.all([
-        AsyncStorage.getItem(REMINDER_ENABLED_KEY),
-        AsyncStorage.getItem(REMINDER_HOUR_KEY),
-        AsyncStorage.getItem(REMINDER_MINUTE_KEY),
-      ]);
-
-      setReminderEnabled(enabledRaw === 'true');
-      setReminderHour(hourRaw ? Number(hourRaw) : 22);
-      setReminderMinute(minuteRaw ? Number(minuteRaw) : 0);
-    } catch (error) {
-      console.error(error);
-    }
-  };
+  const [isImportingCsv, setIsImportingCsv] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
-      void loadReviews();
-      void loadReminderSettings();
+      void loadReminderSettings().then(({ enabled, hour, minute }) => {
+        setReminderEnabled(enabled);
+        setReminderHour(hour);
+        setReminderMinute(minute);
+        setHourInput(String(hour).padStart(2, '0'));
+        setMinuteInput(String(minute).padStart(2, '0'));
+      });
     }, [])
   );
-
-  const analytics = useMemo(() => {
-    const totalReviews = reviews.length;
-
-    const totalRecordedDays = new Set(
-      reviews.map((item) => toDateKey(new Date(item.createdAt)))
-    ).size;
-
-    const favoriteCount = reviews.filter((item) => item.isFavorite).length;
-    const photoCount = reviews.filter((item) => item.photoUri).length;
-
-    return {
-      totalReviews,
-      totalRecordedDays,
-      templateCount: templates.length,
-      tagCount: TAGS.length,
-      favoriteCount,
-      photoCount,
-    };
-  }, [reviews]);
-
-  const confirmClearAll = () => {
-    Alert.alert(
-      '全データを削除しますか？',
-      '保存済みの振り返りがすべて削除されます。この操作は元に戻せません。',
-      [
-        {
-          text: 'キャンセル',
-          style: 'cancel',
-        },
-        {
-          text: '削除する',
-          style: 'destructive',
-          onPress: () => {
-            void handleClearAll();
-          },
-        },
-      ]
-    );
-  };
 
   const handleClearAll = async () => {
     try {
       setIsClearing(true);
       await clearAllReviews();
-      await loadReviews();
-      Alert.alert('削除しました', '保存済みの振り返りをすべて削除しました。');
+      Alert.alert('すべての記録を削除しました');
     } catch (error) {
       console.error(error);
-      Alert.alert('削除に失敗しました', '時間をおいてもう一度お試しください。');
+      Alert.alert('削除に失敗しました');
     } finally {
       setIsClearing(false);
     }
-  };
-
-  const saveReminderSettings = async (
-    enabled: boolean,
-    hour: number,
-    minute: number
-  ) => {
-    await Promise.all([
-      AsyncStorage.setItem(REMINDER_ENABLED_KEY, String(enabled)),
-      AsyncStorage.setItem(REMINDER_HOUR_KEY, String(hour)),
-      AsyncStorage.setItem(REMINDER_MINUTE_KEY, String(minute)),
-    ]);
-  };
-
-  const getStoredReminderNotificationId = async () => {
-    return AsyncStorage.getItem(REMINDER_NOTIFICATION_ID_KEY);
-  };
-
-  const setStoredReminderNotificationId = async (id: string) => {
-    await AsyncStorage.setItem(REMINDER_NOTIFICATION_ID_KEY, id);
-  };
-
-  const clearStoredReminderNotificationId = async () => {
-    await AsyncStorage.removeItem(REMINDER_NOTIFICATION_ID_KEY);
-  };
-
-  const cancelExistingReminderIfAny = async () => {
-    const existingId = await getStoredReminderNotificationId();
-
-    if (existingId) {
-      try {
-        await Notifications.cancelScheduledNotificationAsync(existingId);
-      } catch (error) {
-        console.error(error);
-      }
-    }
-
-    await clearStoredReminderNotificationId();
-  };
-
-  const ensureNotificationPermission = async () => {
-    if (Platform.OS === 'android') {
-      await Notifications.setNotificationChannelAsync('daily-reminder', {
-        name: 'Daily Reminder',
-        importance: Notifications.AndroidImportance.DEFAULT,
-      });
-    }
-
-    const current = await Notifications.getPermissionsAsync();
-
-    if (current.granted) {
-      return true;
-    }
-
-    const requested = await Notifications.requestPermissionsAsync({
-      ios: {
-        allowAlert: true,
-        allowBadge: true,
-        allowSound: true,
-      },
-    });
-
-    return requested.granted;
-  };
-
-  const scheduleDailyReminder = async (hour: number, minute: number) => {
-    await cancelExistingReminderIfAny();
-
-    const notificationId = await Notifications.scheduleNotificationAsync({
-      content: {
-        title: '日記を書く時間だよ！',
-        body: '今日もお疲れさま。軽く振り返ろう。',
-      },
-      trigger: {
-        type: Notifications.SchedulableTriggerInputTypes.DAILY,
-        hour,
-        minute,
-        ...(Platform.OS === 'android' ? { channelId: 'daily-reminder' } : {}),
-      },
-    });
-
-    await setStoredReminderNotificationId(notificationId);
   };
 
   const handleToggleReminder = async (nextValue: boolean) => {
@@ -210,33 +75,20 @@ export default function SettingsScreen() {
 
       if (nextValue) {
         const granted = await ensureNotificationPermission();
-
         if (!granted) {
-          Alert.alert(
-            '通知を有効にできません',
-            '端末の通知権限を許可してください。'
-          );
+          Alert.alert('通知権限がありません', '設定から通知を許可してください。');
           return;
         }
-
         await scheduleDailyReminder(reminderHour, reminderMinute);
-        await saveReminderSettings(true, reminderHour, reminderMinute);
-        setReminderEnabled(true);
-
-        Alert.alert(
-          'リマインドを設定しました',
-          `${formatTime(reminderHour, reminderMinute)} に毎日通知します。`
-        );
       } else {
         await cancelExistingReminderIfAny();
-        await saveReminderSettings(false, reminderHour, reminderMinute);
-        setReminderEnabled(false);
-
-        Alert.alert('リマインドをOFFにしました');
       }
+
+      await saveReminderSettings(nextValue, reminderHour, reminderMinute);
+      setReminderEnabled(nextValue);
     } catch (error) {
       console.error(error);
-      Alert.alert('通知設定の更新に失敗しました');
+      Alert.alert('リマインド設定の更新に失敗しました');
     } finally {
       setIsSavingReminder(false);
     }
@@ -245,90 +97,120 @@ export default function SettingsScreen() {
   const applyReminderTime = async (hour: number, minute: number) => {
     try {
       setIsSavingReminder(true);
-
       await saveReminderSettings(reminderEnabled, hour, minute);
       setReminderHour(hour);
       setReminderMinute(minute);
+      setHourInput(String(hour).padStart(2, '0'));
+      setMinuteInput(String(minute).padStart(2, '0'));
 
       if (reminderEnabled) {
-        const granted = await ensureNotificationPermission();
-
-        if (!granted) {
-          Alert.alert(
-            '通知を更新できません',
-            '端末の通知権限を許可してください。'
-          );
-          return;
-        }
-
         await scheduleDailyReminder(hour, minute);
-        Alert.alert(
-          '通知時刻を更新しました',
-          `${formatTime(hour, minute)} に毎日通知します。`
-        );
       }
     } catch (error) {
       console.error(error);
-      Alert.alert('通知時刻の更新に失敗しました');
+      Alert.alert('時刻の更新に失敗しました');
     } finally {
       setIsSavingReminder(false);
     }
   };
 
-  const adjustReminderHour = async (delta: number) => {
-    const nextHour = (reminderHour + delta + 24) % 24;
-    await applyReminderTime(nextHour, reminderMinute);
+  const handleApplyTextTime = () => {
+    const hour = Number(hourInput);
+    const minute = Number(minuteInput);
+    const valid = Number.isInteger(hour) && hour >= 0 && hour <= 23 && Number.isInteger(minute) && minute >= 0 && minute <= 59;
+
+    if (!valid) {
+      Alert.alert('時刻の形式が正しくありません', '0-23 時、0-59 分で入力してください。');
+      return;
+    }
+
+    void applyReminderTime(hour, minute);
   };
 
-  const adjustReminderMinute = async (delta: number) => {
-    const total = reminderHour * 60 + reminderMinute + delta;
-    const wrapped = (total + 24 * 60) % (24 * 60);
-    const nextHour = Math.floor(wrapped / 60);
-    const nextMinute = wrapped % 60;
+  const handleImportCsv = async () => {
+    try {
+      setIsImportingCsv(true);
+      const selected = await File.pickFileAsync(undefined, 'text/*');
+      const pickedFile = Array.isArray(selected) ? selected[0] : selected;
+      const csvText = await pickedFile.text();
+      const parsed = parseNotionCsv(csvText);
 
-    await applyReminderTime(nextHour, nextMinute);
-  };
+      if (parsed.drafts.length === 0) {
+        Alert.alert(
+          'CSV を取り込めませんでした',
+          buildImportResultMessage(0, parsed.issues)
+        );
+        return;
+      }
 
-  const applyQuickTimePreset = async (hour: number, minute: number) => {
-    await applyReminderTime(hour, minute);
+      const imported = await importReviews(parsed.drafts);
+      const issues = parsed.issues.concat(
+        imported.skipped.map((item) => ({
+          rowNumber: item.sourceRowNumber ?? 0,
+          reason: item.reason,
+        }))
+      );
+
+      Alert.alert(
+        'CSV を取り込みました',
+        buildImportResultMessage(imported.importedCount, issues)
+      );
+    } catch (error) {
+      if (isCancelledFilePick(error)) {
+        return;
+      }
+
+      console.error(error);
+      Alert.alert('CSV の取り込みに失敗しました');
+    } finally {
+      setIsImportingCsv(false);
+    }
   };
 
   return (
     <SwipeTabPage tabKey="settings">
       <ScrollView contentContainerStyle={styles.container}>
-        <Text style={styles.title}>設定</Text>
-        <Text style={styles.subtitle}>データやアプリの基本情報を確認できます</Text>
-
-        <View style={styles.sectionCard}>
-          <Text style={styles.sectionTitle}>現在のデータ</Text>
-
-          <View style={styles.summaryGrid}>
-            <SummaryCard label="保存件数" value={`${analytics.totalReviews}件`} />
-            <SummaryCard label="記録日数" value={`${analytics.totalRecordedDays}日`} />
-            <SummaryCard label="テンプレ数" value={`${analytics.templateCount}個`} />
-            <SummaryCard label="タグ数" value={`${analytics.tagCount}個`} />
-            <SummaryCard label="お気に入り" value={`${analytics.favoriteCount}件`} />
-            <SummaryCard label="写真付き" value={`${analytics.photoCount}件`} />
-          </View>
-
-          <Pressable style={styles.reloadButton} onPress={loadReviews}>
-            <Text style={styles.reloadButtonText}>再読み込み</Text>
+        <SectionCard title="CSV Import">
+          <Text style={styles.sectionBody}>
+            Notion の CSV を読み込んで、現在の振り返り形式に変換して保存します。初版では写真は取り込まず、同じ日付のレビューはスキップします。
+          </Text>
+          <Pressable
+            style={[styles.linkButton, isImportingCsv && { opacity: 0.6 }]}
+            onPress={() => {
+              void handleImportCsv();
+            }}
+            disabled={isImportingCsv}
+          >
+            <Text style={styles.linkButtonText}>
+              {isImportingCsv ? 'CSV を読み込み中...' : 'CSV を選ぶ'}
+            </Text>
           </Pressable>
+        </SectionCard>
+        <Text style={styles.title}>設定</Text>
+        <Text style={styles.subtitle}>
+          使い方を軽く保ったまま、通知やタグだけ調整できます。
+        </Text>
+
+        <View style={styles.brandCard}>
+          <Text style={styles.brandName}>{brand.name}</Text>
+          <Text style={styles.brandSubtitle}>{brand.subtitle}</Text>
+          <Text style={styles.brandText}>
+            入力負荷を増やしすぎず、見返しやすさを優先する前提で設定します。
+          </Text>
         </View>
 
-        <View style={styles.sectionCard}>
-          <Text style={styles.sectionTitle}>通知リマインド</Text>
-          <Text style={styles.sectionDescription}>
-            毎日決まった時間に、振り返りを書く通知を出します。
+        <SectionCard title="リマインド">
+          <Text style={styles.sectionBody}>
+            通知は 1 日 1 回だけです。分単位で時刻を指定できます。
           </Text>
 
-          <View style={styles.reminderToggleRow}>
-            <View style={styles.reminderToggleTextArea}>
-              <Text style={styles.reminderToggleTitle}>毎日リマインド</Text>
-              <Text style={styles.reminderToggleSubText}>
+          <View style={styles.toggleRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.toggleTitle}>毎日のリマインド</Text>
+              <Text style={styles.toggleSubtitle}>
                 {reminderEnabled
                   ? `${formatTime(reminderHour, reminderMinute)} に通知`
-                  : '現在はOFFです'}
+                  : 'オフ'}
               </Text>
             </View>
 
@@ -338,117 +220,128 @@ export default function SettingsScreen() {
                 void handleToggleReminder(value);
               }}
               disabled={isSavingReminder}
+              trackColor={{
+                false: theme.colors.surfaceStrong,
+                true: theme.colors.primarySoft,
+              }}
+              thumbColor={
+                reminderEnabled ? theme.colors.primary : theme.colors.surface
+              }
             />
           </View>
 
-          <View style={styles.timeEditorCard}>
-            <Text style={styles.timeEditorLabel}>通知時刻</Text>
-
-            <View style={styles.timeRow}>
-              <TimeAdjuster
-                label="時"
-                value={`${String(reminderHour).padStart(2, '0')}`}
-                onMinus={() => {
-                  void adjustReminderHour(-1);
-                }}
-                onPlus={() => {
-                  void adjustReminderHour(1);
-                }}
-                disabled={isSavingReminder}
-              />
-
-              <Text style={styles.timeColon}>:</Text>
-
-              <TimeAdjuster
-                label="分"
-                value={`${String(reminderMinute).padStart(2, '0')}`}
-                onMinus={() => {
-                  void adjustReminderMinute(-5);
-                }}
-                onPlus={() => {
-                  void adjustReminderMinute(5);
-                }}
-                disabled={isSavingReminder}
-              />
-            </View>
-
-            <View style={styles.quickPresetRow}>
-              <QuickTimeButton
-                label="21:00"
-                onPress={() => {
-                  void applyQuickTimePreset(21, 0);
-                }}
-              />
-              <QuickTimeButton
-                label="22:00"
-                onPress={() => {
-                  void applyQuickTimePreset(22, 0);
-                }}
-              />
-              <QuickTimeButton
-                label="23:00"
-                onPress={() => {
-                  void applyQuickTimePreset(23, 0);
-                }}
-              />
-            </View>
+          <View style={styles.timeCard}>
+            <TimeAdjuster
+              label="時"
+              value={String(reminderHour).padStart(2, '0')}
+              onMinus={() => {
+                void applyReminderTime((reminderHour + 23) % 24, reminderMinute);
+              }}
+              onPlus={() => {
+                void applyReminderTime((reminderHour + 1) % 24, reminderMinute);
+              }}
+              disabled={isSavingReminder}
+            />
+            <Text style={styles.timeColon}>:</Text>
+            <TimeAdjuster
+              label="分"
+              value={String(reminderMinute).padStart(2, '0')}
+              onMinus={() => {
+                const total = (reminderHour * 60 + reminderMinute - 1 + 1440) % 1440;
+                void applyReminderTime(Math.floor(total / 60), total % 60);
+              }}
+              onPlus={() => {
+                const total = (reminderHour * 60 + reminderMinute + 1) % 1440;
+                void applyReminderTime(Math.floor(total / 60), total % 60);
+              }}
+              disabled={isSavingReminder}
+            />
           </View>
-        </View>
 
-        <View style={styles.sectionCard}>
-          <Text style={styles.sectionTitle}>データ管理</Text>
-          <Text style={styles.sectionDescription}>
-            保存済みの振り返りをまとめて削除できます。
+          <View style={styles.manualRow}>
+            <TextInput
+              style={styles.timeInput}
+              value={hourInput}
+              onChangeText={setHourInput}
+              keyboardType="number-pad"
+              maxLength={2}
+              placeholder="22"
+              placeholderTextColor={theme.colors.textSoft}
+            />
+            <Text style={styles.manualColon}>:</Text>
+            <TextInput
+              style={styles.timeInput}
+              value={minuteInput}
+              onChangeText={setMinuteInput}
+              keyboardType="number-pad"
+              maxLength={2}
+              placeholder="00"
+              placeholderTextColor={theme.colors.textSoft}
+            />
+            <Pressable style={styles.applyButton} onPress={handleApplyTextTime}>
+              <Text style={styles.applyButtonText}>反映</Text>
+            </Pressable>
+          </View>
+        </SectionCard>
+
+        <SectionCard title="タグ管理">
+          <Text style={styles.sectionBody}>
+            行動タグと状態タグを別々に追加・非表示できます。
+          </Text>
+          <Pressable
+            style={styles.linkButton}
+            onPress={() => router.push('./tags')}
+          >
+            <Text style={styles.linkButtonText}>タグを管理する</Text>
+          </Pressable>
+        </SectionCard>
+
+        <SectionCard title="データ管理">
+          <Text style={styles.sectionBody}>
+            保存済みの記録をすべて削除します。元に戻せません。
           </Text>
 
           <Pressable
-            style={[
-              styles.dangerButton,
-              isClearing && styles.dangerButtonDisabled,
-            ]}
-            onPress={confirmClearAll}
+            style={[styles.dangerButton, isClearing && { opacity: 0.6 }]}
             disabled={isClearing}
+            onPress={() =>
+              Alert.alert(
+                'すべての記録を削除しますか？',
+                'この操作は取り消せません。',
+                [
+                  { text: 'キャンセル', style: 'cancel' },
+                  {
+                    text: '削除する',
+                    style: 'destructive',
+                    onPress: () => {
+                      void handleClearAll();
+                    },
+                  },
+                ]
+              )
+            }
           >
             <Text style={styles.dangerButtonText}>
-              {isClearing ? '削除中...' : '全データを削除'}
+              {isClearing ? '削除中...' : 'すべて削除'}
             </Text>
           </Pressable>
-        </View>
-
-        <View style={styles.sectionCard}>
-          <Text style={styles.sectionTitle}>今後追加したい機能</Text>
-
-          <View style={styles.todoItem}>
-            <Text style={styles.todoTitle}>JSONエクスポート / インポート</Text>
-            <Text style={styles.todoText}>
-              振り返りデータをバックアップしたり、復元できるようにする予定です。
-            </Text>
-          </View>
-
-          <View style={styles.todoItem}>
-            <Text style={styles.todoTitle}>タグ管理</Text>
-            <Text style={styles.todoText}>
-              タグの追加・編集・削除を設定画面からできるようにする予定です。
-            </Text>
-          </View>
-
-          <View style={styles.todoItemLast}>
-            <Text style={styles.todoTitle}>お気に入りテンプレ</Text>
-            <Text style={styles.todoText}>
-              よく使うテンプレを上に出して、作成をもっと早くする予定です。
-            </Text>
-          </View>
-        </View>
+        </SectionCard>
       </ScrollView>
     </SwipeTabPage>
   );
 }
 
-function SummaryCard({ label, value }: { label: string; value: string }) {
+function SectionCard({
+  title,
+  children,
+}: {
+  title: string;
+  children: React.ReactNode;
+}) {
   return (
-    <View style={styles.summaryCard}>
-      <Text style={styles.summaryLabel}>{label}</Text>
-      <Text style={styles.summaryValue}>{value}</Text>
+    <View style={styles.sectionCard}>
+      <Text style={styles.sectionTitle}>{title}</Text>
+      {children}
     </View>
   );
 }
@@ -469,280 +362,327 @@ function TimeAdjuster({
   return (
     <View style={styles.timeAdjuster}>
       <Text style={styles.timeAdjusterLabel}>{label}</Text>
-
-      <View style={styles.timeAdjusterControls}>
+      <View style={styles.timeAdjusterRow}>
         <Pressable
-          style={[styles.timeAdjustButton, disabled && styles.disabledButton]}
+          style={[styles.timeAdjustButton, disabled && { opacity: 0.5 }]}
           onPress={onMinus}
           disabled={disabled}
         >
-          <Text style={styles.timeAdjustButtonText}>−</Text>
+          <Text style={styles.timeAdjustButtonText}>-</Text>
         </Pressable>
-
         <View style={styles.timeValueBox}>
           <Text style={styles.timeValueText}>{value}</Text>
         </View>
-
         <Pressable
-          style={[styles.timeAdjustButton, disabled && styles.disabledButton]}
+          style={[styles.timeAdjustButton, disabled && { opacity: 0.5 }]}
           onPress={onPlus}
           disabled={disabled}
         >
-          <Text style={styles.timeAdjustButtonText}>＋</Text>
+          <Text style={styles.timeAdjustButtonText}>+</Text>
         </Pressable>
       </View>
     </View>
   );
 }
 
-function QuickTimeButton({
-  label,
-  onPress,
-}: {
-  label: string;
-  onPress: () => void;
-}) {
-  return (
-    <Pressable style={styles.quickPresetButton} onPress={onPress}>
-      <Text style={styles.quickPresetButtonText}>{label}</Text>
-    </Pressable>
-  );
+async function loadReminderSettings() {
+  try {
+    const [enabledRaw, hourRaw, minuteRaw] = await Promise.all([
+      AsyncStorage.getItem(REMINDER_ENABLED_KEY),
+      AsyncStorage.getItem(REMINDER_HOUR_KEY),
+      AsyncStorage.getItem(REMINDER_MINUTE_KEY),
+    ]);
+
+    return {
+      enabled: enabledRaw === 'true',
+      hour: hourRaw ? Number(hourRaw) : 22,
+      minute: minuteRaw ? Number(minuteRaw) : 0,
+    };
+  } catch (error) {
+    console.error(error);
+    return { enabled: false, hour: 22, minute: 0 };
+  }
 }
 
-function toDateKey(date: Date) {
-  const year = date.getFullYear();
-  const month = `${date.getMonth() + 1}`.padStart(2, '0');
-  const day = `${date.getDate()}`.padStart(2, '0');
+async function saveReminderSettings(enabled: boolean, hour: number, minute: number) {
+  await Promise.all([
+    AsyncStorage.setItem(REMINDER_ENABLED_KEY, String(enabled)),
+    AsyncStorage.setItem(REMINDER_HOUR_KEY, String(hour)),
+    AsyncStorage.setItem(REMINDER_MINUTE_KEY, String(minute)),
+  ]);
+}
 
-  return `${year}-${month}-${day}`;
+async function ensureNotificationPermission() {
+  if (Platform.OS === 'android') {
+    await Notifications.setNotificationChannelAsync('daily-reminder', {
+      name: 'Furikaeri Reminder',
+      importance: Notifications.AndroidImportance.DEFAULT,
+    });
+  }
+
+  const current = await Notifications.getPermissionsAsync();
+  if (current.granted) return true;
+
+  const requested = await Notifications.requestPermissionsAsync({
+    ios: {
+      allowAlert: true,
+      allowBadge: true,
+      allowSound: true,
+    },
+  });
+
+  return requested.granted;
+}
+
+async function cancelExistingReminderIfAny() {
+  const existingId = await AsyncStorage.getItem(REMINDER_NOTIFICATION_ID_KEY);
+  if (existingId) {
+    try {
+      await Notifications.cancelScheduledNotificationAsync(existingId);
+    } catch (error) {
+      console.error(error);
+    }
+  }
+  await AsyncStorage.removeItem(REMINDER_NOTIFICATION_ID_KEY);
+}
+
+async function scheduleDailyReminder(hour: number, minute: number) {
+  await cancelExistingReminderIfAny();
+
+  const notificationId = await Notifications.scheduleNotificationAsync({
+    content: {
+      title: 'ふりかえりの時間です',
+      body: '今日のことを短く残しておきましょう。',
+    },
+    trigger: {
+      type: Notifications.SchedulableTriggerInputTypes.DAILY,
+      hour,
+      minute,
+      ...(Platform.OS === 'android' ? { channelId: 'daily-reminder' } : {}),
+    },
+  });
+
+  await AsyncStorage.setItem(REMINDER_NOTIFICATION_ID_KEY, notificationId);
 }
 
 function formatTime(hour: number, minute: number) {
   return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
 }
 
+function isCancelledFilePick(error: unknown) {
+  return error instanceof Error && /cancel/i.test(error.message);
+}
+
+function buildImportResultMessage(
+  importedCount: number,
+  issues: { rowNumber: number; reason: string }[]
+) {
+  const issueLines = issues
+    .filter((item) => item.reason)
+    .slice(0, 5)
+    .map((item) =>
+      item.rowNumber > 0 ? `${item.rowNumber} 行目: ${item.reason}` : item.reason
+    );
+
+  return [
+    `${importedCount} 件を取り込みました。`,
+    issues.length > 0 ? `${issues.length} 件はスキップされています。` : 'スキップはありません。',
+    issueLines.length > 0 ? '' : null,
+    ...issueLines,
+  ]
+    .filter(Boolean)
+    .join('\n');
+}
+
 const styles = StyleSheet.create({
   container: {
     flexGrow: 1,
-    backgroundColor: '#f7f8fa',
-    padding: 20,
+    backgroundColor: theme.colors.background,
+    padding: theme.spacing.xl,
     paddingBottom: 120,
   },
   title: {
-    fontSize: 28,
-    fontWeight: '700',
-    marginTop: 12,
-    marginBottom: 8,
-    color: '#111',
+    ...theme.typography.title,
+    color: theme.colors.text,
+    marginTop: theme.spacing.md,
+    marginBottom: theme.spacing.sm,
   },
   subtitle: {
-    fontSize: 14,
-    color: '#666',
-    marginBottom: 16,
+    ...theme.typography.body,
+    color: theme.colors.textMuted,
+    marginBottom: theme.spacing.xl,
+  },
+  brandCard: {
+    ...cardShadow,
+    backgroundColor: theme.colors.primarySoft,
+    borderRadius: theme.radius.xl,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    padding: theme.spacing.xxl,
+    marginBottom: theme.spacing.lg,
+  },
+  brandName: {
+    ...theme.typography.caption,
+    color: theme.colors.primaryDark,
+    marginBottom: theme.spacing.sm,
+  },
+  brandSubtitle: {
+    ...theme.typography.section,
+    color: theme.colors.text,
+    marginBottom: theme.spacing.sm,
+  },
+  brandText: {
+    ...theme.typography.body,
+    color: theme.colors.textMuted,
   },
   sectionCard: {
-    backgroundColor: '#fff',
-    borderRadius: 14,
-    padding: 16,
+    ...cardShadow,
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.radius.xl,
     borderWidth: 1,
-    borderColor: '#e3e6eb',
-    marginBottom: 14,
+    borderColor: theme.colors.border,
+    padding: theme.spacing.xl,
+    marginBottom: theme.spacing.md,
   },
   sectionTitle: {
-    fontSize: 17,
-    fontWeight: '700',
-    color: '#111',
-    marginBottom: 10,
+    ...theme.typography.section,
+    color: theme.colors.text,
+    marginBottom: theme.spacing.md,
   },
-  sectionDescription: {
-    fontSize: 14,
-    color: '#666',
-    lineHeight: 20,
-    marginBottom: 14,
+  sectionBody: {
+    ...theme.typography.body,
+    color: theme.colors.textMuted,
+    marginBottom: theme.spacing.lg,
   },
-  summaryGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-    marginBottom: 14,
-  },
-  summaryCard: {
-    width: '47%',
-    backgroundColor: '#f7f9fc',
-    borderRadius: 12,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: '#e7ebf2',
-  },
-  summaryLabel: {
-    fontSize: 13,
-    color: '#666',
-    marginBottom: 8,
-  },
-  summaryValue: {
-    fontSize: 22,
-    fontWeight: '700',
-    color: '#111',
-  },
-  reloadButton: {
-    backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: '#d9dfe7',
-    borderRadius: 10,
-    paddingVertical: 12,
-    alignItems: 'center',
-  },
-  reloadButtonText: {
-    fontWeight: '700',
-    color: '#333',
-  },
-  reminderToggleRow: {
+  toggleRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 16,
+    gap: theme.spacing.md,
+    marginBottom: theme.spacing.lg,
   },
-  reminderToggleTextArea: {
-    flex: 1,
-    paddingRight: 16,
+  toggleTitle: {
+    ...theme.typography.body,
+    color: theme.colors.text,
   },
-  reminderToggleTitle: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#111',
-    marginBottom: 4,
+  toggleSubtitle: {
+    ...theme.typography.caption,
+    color: theme.colors.textSoft,
+    marginTop: 4,
   },
-  reminderToggleSubText: {
-    fontSize: 13,
-    color: '#666',
-  },
-  timeEditorCard: {
-    backgroundColor: '#f7f9fc',
-    borderRadius: 12,
-    padding: 14,
+  timeCard: {
+    backgroundColor: theme.colors.surfaceMuted,
+    borderRadius: theme.radius.lg,
     borderWidth: 1,
-    borderColor: '#e7ebf2',
-  },
-  timeEditorLabel: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#111',
-    marginBottom: 12,
-  },
-  timeRow: {
+    borderColor: theme.colors.border,
+    padding: theme.spacing.lg,
     flexDirection: 'row',
-    alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 12,
-  },
-  timeColon: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: '#111',
-    marginHorizontal: 10,
-    marginTop: 20,
+    alignItems: 'center',
+    marginBottom: theme.spacing.md,
   },
   timeAdjuster: {
     alignItems: 'center',
   },
   timeAdjusterLabel: {
-    fontSize: 12,
-    color: '#666',
-    marginBottom: 8,
-    fontWeight: '700',
+    ...theme.typography.caption,
+    color: theme.colors.textSoft,
+    marginBottom: theme.spacing.sm,
   },
-  timeAdjusterControls: {
+  timeAdjusterRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: theme.spacing.sm,
   },
   timeAdjustButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: '#d9dfe7',
+    width: 34,
+    height: 34,
+    borderRadius: theme.radius.md,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  disabledButton: {
-    opacity: 0.6,
+    backgroundColor: theme.colors.surface,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
   },
   timeAdjustButtonText: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#111',
+    color: theme.colors.text,
   },
   timeValueBox: {
-    minWidth: 64,
+    minWidth: 62,
     height: 40,
-    borderRadius: 10,
-    backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: '#d9dfe7',
+    borderRadius: theme.radius.md,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 12,
+    backgroundColor: theme.colors.surface,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
   },
   timeValueText: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#111',
+    color: theme.colors.text,
   },
-  quickPresetRow: {
+  timeColon: {
+    fontSize: 26,
+    fontWeight: '700',
+    color: theme.colors.text,
+    marginHorizontal: theme.spacing.md,
+    marginTop: 22,
+  },
+  manualRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
+    alignItems: 'center',
+    gap: theme.spacing.sm,
   },
-  quickPresetButton: {
-    backgroundColor: '#eef4ff',
+  timeInput: {
+    width: 72,
+    backgroundColor: theme.colors.surfaceMuted,
+    borderRadius: theme.radius.lg,
     borderWidth: 1,
-    borderColor: '#bfd3ff',
-    borderRadius: 999,
-    paddingVertical: 8,
-    paddingHorizontal: 14,
-  },
-  quickPresetButtonText: {
-    color: '#1d4ed8',
-    fontSize: 13,
+    borderColor: theme.colors.border,
+    paddingVertical: 12,
+    textAlign: 'center',
+    color: theme.colors.text,
+    fontSize: 16,
     fontWeight: '700',
   },
+  manualColon: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: theme.colors.text,
+  },
+  applyButton: {
+    backgroundColor: theme.colors.primarySoft,
+    borderRadius: theme.radius.lg,
+    paddingHorizontal: theme.spacing.lg,
+    paddingVertical: 12,
+  },
+  applyButtonText: {
+    ...theme.typography.caption,
+    color: theme.colors.primaryDark,
+  },
+  linkButton: {
+    alignSelf: 'flex-start',
+    backgroundColor: theme.colors.primarySoft,
+    borderRadius: theme.radius.lg,
+    paddingHorizontal: theme.spacing.lg,
+    paddingVertical: 12,
+  },
+  linkButtonText: {
+    ...theme.typography.caption,
+    color: theme.colors.primaryDark,
+  },
   dangerButton: {
-    backgroundColor: '#fff1f2',
-    borderWidth: 1,
-    borderColor: '#fecdd3',
-    borderRadius: 12,
+    backgroundColor: theme.colors.dangerSoft,
+    borderRadius: theme.radius.lg,
     paddingVertical: 14,
     alignItems: 'center',
   },
-  dangerButtonDisabled: {
-    opacity: 0.6,
-  },
   dangerButtonText: {
-    color: '#be123c',
-    fontSize: 15,
+    ...theme.typography.body,
+    color: theme.colors.danger,
     fontWeight: '700',
-  },
-  todoItem: {
-    paddingBottom: 14,
-    marginBottom: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eef1f5',
-  },
-  todoItemLast: {
-    paddingBottom: 0,
-    marginBottom: 0,
-  },
-  todoTitle: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#111',
-    marginBottom: 6,
-  },
-  todoText: {
-    fontSize: 14,
-    color: '#666',
-    lineHeight: 20,
   },
 });

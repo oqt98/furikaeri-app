@@ -1,21 +1,11 @@
 import { useFocusEffect } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
-import {
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import SwipeTabPage from '../../components/SwipeTabPage';
-import { getReviews, ReviewItem } from '../../lib/storage';
-
-const MOOD_ORDER = [
-  '😊 うれしい',
-  '😌 おだやか',
-  '🤔 ふつう',
-  '😓 つかれた',
-  '😢 落ち込み',
-] as const;
+import { CATEGORIES, MOOD_OPTIONS } from '../../data/reviewOptions';
+import { buildInsightSummary } from '../../lib/insights';
+import { getReviews, getTagCatalog, type ReviewItem } from '../../lib/storage';
+import { cardShadow, theme } from '../../lib/theme';
 
 type CountItem = {
   label: string;
@@ -24,21 +14,21 @@ type CountItem = {
 
 export default function AnalyticsScreen() {
   const [reviews, setReviews] = useState<ReviewItem[]>([]);
-
-  const loadReviews = async () => {
-    const data = await getReviews();
-    setReviews(data);
-  };
+  const [tagLabelMap, setTagLabelMap] = useState<Map<string, string>>(new Map());
 
   useFocusEffect(
     useCallback(() => {
-      loadReviews();
+      void Promise.all([getReviews(), getTagCatalog()]).then(([nextReviews, catalog]) => {
+        setReviews(nextReviews);
+        setTagLabelMap(
+          new Map([...catalog.action, ...catalog.state].map((tag) => [tag.id, tag.label]))
+        );
+      });
     }, [])
   );
 
   const analytics = useMemo(() => {
     const totalReviews = reviews.length;
-
     const uniqueDateKeys = Array.from(
       new Set(reviews.map((item) => toDateKey(new Date(item.createdAt))))
     ).sort((a, b) => (a < b ? 1 : -1));
@@ -46,143 +36,132 @@ export default function AnalyticsScreen() {
     const totalRecordedDays = uniqueDateKeys.length;
     const currentStreak = calculateCurrentStreak(uniqueDateKeys);
 
-    const workCount = reviews.filter((item) => item.category === '仕事').length;
-    const privateCount = reviews.filter((item) => item.category === 'プラベ').length;
+    const categoryCounts: CountItem[] = CATEGORIES.map((category) => ({
+      label: category,
+      count: reviews.filter((item) => item.category === category).length,
+    }));
 
-    const moodMap = new Map<string, number>();
-    for (const mood of MOOD_ORDER) {
-      moodMap.set(mood, 0);
-    }
+    const moodCounts: CountItem[] = MOOD_OPTIONS.map((mood) => ({
+      label: `${mood.emoji} ${mood.label}`,
+      count: reviews.filter((item) => item.mood === mood.value).length,
+    }));
 
-    for (const item of reviews) {
-      if (!item.mood) continue;
-      moodMap.set(item.mood, (moodMap.get(item.mood) ?? 0) + 1);
-    }
-
-    const moodCounts: CountItem[] = Array.from(moodMap.entries()).map(
-      ([label, count]) => ({
-        label,
-        count,
-      })
-    );
-
-    const templateMap = new Map<string, number>();
-    for (const item of reviews) {
-      templateMap.set(
-        item.templateName,
-        (templateMap.get(item.templateName) ?? 0) + 1
-      );
-    }
-
-    const templateCounts = Array.from(templateMap.entries())
-      .map(([label, count]) => ({ label, count }))
-      .sort((a, b) => b.count - a.count);
-
-    const tagMap = new Map<string, number>();
-    for (const item of reviews) {
-      for (const tag of item.tags ?? []) {
-        tagMap.set(tag, (tagMap.get(tag) ?? 0) + 1);
-      }
-    }
-
-    const tagCounts = Array.from(tagMap.entries())
+    const templateCounts = Array.from(
+      reviews.reduce((map, item) => {
+        map.set(item.templateName, (map.get(item.templateName) ?? 0) + 1);
+        return map;
+      }, new Map<string, number>())
+    )
       .map(([label, count]) => ({ label, count }))
       .sort((a, b) => b.count - a.count)
       .slice(0, 5);
 
-    const now = new Date();
-    const currentMonthKey = `${now.getFullYear()}-${`${now.getMonth() + 1}`.padStart(2, '0')}`;
-    const thisMonthCount = reviews.filter((item) => {
-      const date = new Date(item.createdAt);
-      const monthKey = `${date.getFullYear()}-${`${date.getMonth() + 1}`.padStart(2, '0')}`;
-      return monthKey === currentMonthKey;
-    }).length;
+    const actionTagCounts = Array.from(
+      reviews.reduce((map, item) => {
+        for (const tagId of item.actionTagIds) {
+          const label = tagLabelMap.get(tagId) ?? tagId;
+          map.set(label, (map.get(label) ?? 0) + 1);
+        }
+        return map;
+      }, new Map<string, number>())
+    )
+      .map(([label, count]) => ({ label, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 5);
+
+    const stateTagCounts = Array.from(
+      reviews.reduce((map, item) => {
+        for (const tagId of item.stateTagIds) {
+          const label = tagLabelMap.get(tagId) ?? tagId;
+          map.set(label, (map.get(label) ?? 0) + 1);
+        }
+        return map;
+      }, new Map<string, number>())
+    )
+      .map(([label, count]) => ({ label, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 5);
 
     return {
       totalReviews,
       totalRecordedDays,
       currentStreak,
-      workCount,
-      privateCount,
+      categoryCounts,
       moodCounts,
       templateCounts,
-      tagCounts,
-      thisMonthCount,
+      actionTagCounts,
+      stateTagCounts,
     };
-  }, [reviews]);
+  }, [reviews, tagLabelMap]);
 
+  const insight = useMemo(() => buildInsightSummary(reviews), [reviews]);
   const hasData = reviews.length > 0;
 
   return (
     <SwipeTabPage tabKey="analytics">
       <ScrollView contentContainerStyle={styles.container}>
         <Text style={styles.title}>分析</Text>
-        <Text style={styles.subtitle}>振り返りの傾向をまとめて確認できます</Text>
+        <Text style={styles.subtitle}>
+          軽めの集計だけに絞って、次の日に活かしやすい形で見せます。
+        </Text>
 
         {!hasData ? (
           <View style={styles.emptyCard}>
-            <Text style={styles.emptyTitle}>まだ分析できるデータがありません</Text>
+            <Text style={styles.emptyTitle}>まだ分析できる記録がありません</Text>
             <Text style={styles.emptyText}>
-              振り返りを保存すると、ここに件数や傾向が表示されます。
+              数件たまると、気分やタグの偏りが見え始めます。
             </Text>
           </View>
         ) : (
           <>
             <View style={styles.summaryGrid}>
-              <SummaryCard label="総記録数" value={`${analytics.totalReviews}件`} />
-              <SummaryCard label="記録した日数" value={`${analytics.totalRecordedDays}日`} />
-              <SummaryCard label="連続記録" value={`${analytics.currentStreak}日`} />
-              <SummaryCard label="今月の記録" value={`${analytics.thisMonthCount}件`} />
+              <SummaryCard label="記録数" value={`${analytics.totalReviews}件`} />
+              <SummaryCard label="記録した日" value={`${analytics.totalRecordedDays}日`} />
+              <SummaryCard label="連続日数" value={`${analytics.currentStreak}日`} />
             </View>
 
-            <SectionCard title="カテゴリ比率">
-              <RatioRow
-                label="仕事"
-                count={analytics.workCount}
-                total={analytics.totalReviews}
-              />
-              <RatioRow
-                label="プラベ"
-                count={analytics.privateCount}
-                total={analytics.totalReviews}
-              />
+            <InsightCard title={insight.weeklyTitle} body={insight.weeklyBody} />
+            <InsightCard title={insight.nextTitle} body={insight.nextBody} subtle />
+
+            <SectionCard title="カテゴリのバランス">
+              {analytics.categoryCounts.map((item) => (
+                <RatioRow
+                  key={item.label}
+                  label={item.label}
+                  count={item.count}
+                  total={analytics.totalReviews}
+                />
+              ))}
             </SectionCard>
 
-            <SectionCard title="気分分布">
+            <SectionCard title="気分の分布">
               {analytics.moodCounts.map((item) => (
                 <BarRow
                   key={item.label}
                   label={item.label}
                   count={item.count}
-                  max={Math.max(...analytics.moodCounts.map((m) => m.count), 1)}
+                  max={Math.max(...analytics.moodCounts.map((row) => row.count), 1)}
                 />
               ))}
             </SectionCard>
 
-            <SectionCard title="テンプレ利用回数">
+            <SectionCard title="よく使うテンプレート">
               {analytics.templateCounts.map((item) => (
                 <BarRow
                   key={item.label}
                   label={item.label}
                   count={item.count}
-                  max={Math.max(...analytics.templateCounts.map((t) => t.count), 1)}
+                  max={Math.max(...analytics.templateCounts.map((row) => row.count), 1)}
                 />
               ))}
             </SectionCard>
 
-            <SectionCard title="よく使うタグ TOP5">
-              {analytics.tagCounts.length === 0 ? (
-                <Text style={styles.noDataText}>タグ付きの記録はまだありません。</Text>
-              ) : (
-                analytics.tagCounts.map((item, index) => (
-                  <TagRankRow
-                    key={item.label}
-                    rank={index + 1}
-                    label={item.label}
-                    count={item.count}
-                  />
-                ))
-              )}
+            <SectionCard title="よく使う行動タグ">
+              <RankList items={analytics.actionTagCounts} emptyText="行動タグはまだありません。" />
+            </SectionCard>
+
+            <SectionCard title="よく使う状態タグ">
+              <RankList items={analytics.stateTagCounts} emptyText="状態タグはまだありません。" />
             </SectionCard>
           </>
         )}
@@ -196,6 +175,25 @@ function SummaryCard({ label, value }: { label: string; value: string }) {
     <View style={styles.summaryCard}>
       <Text style={styles.summaryLabel}>{label}</Text>
       <Text style={styles.summaryValue}>{value}</Text>
+    </View>
+  );
+}
+
+function InsightCard({
+  title,
+  body,
+  subtle,
+}: {
+  title: string;
+  body: string;
+  subtle?: boolean;
+}) {
+  return (
+    <View style={[styles.insightCard, subtle && styles.insightCardSubtle]}>
+      <Text style={[styles.insightTitle, subtle && styles.insightTitleSubtle]}>
+        {title}
+      </Text>
+      <Text style={styles.insightBody}>{body}</Text>
     </View>
   );
 }
@@ -227,16 +225,15 @@ function RatioRow({
   const percent = total === 0 ? 0 : Math.round((count / total) * 100);
 
   return (
-    <View style={styles.ratioRow}>
-      <View style={styles.ratioHeader}>
-        <Text style={styles.ratioLabel}>{label}</Text>
-        <Text style={styles.ratioValue}>
+    <View style={styles.rowBlock}>
+      <View style={styles.rowHeader}>
+        <Text style={styles.rowLabel}>{label}</Text>
+        <Text style={styles.rowValue}>
           {count}件 / {percent}%
         </Text>
       </View>
-
-      <View style={styles.progressTrack}>
-        <View style={[styles.progressFill, { width: `${percent}%` }]} />
+      <View style={styles.track}>
+        <View style={[styles.fill, { width: `${percent}%` }]} />
       </View>
     </View>
   );
@@ -251,42 +248,46 @@ function BarRow({
   count: number;
   max: number;
 }) {
-  const percent = max === 0 ? 0 : Math.max((count / max) * 100, 4);
+  const percent = max === 0 ? 0 : Math.max(Math.round((count / max) * 100), 4);
 
   return (
-    <View style={styles.barRow}>
-      <View style={styles.barHeader}>
-        <Text style={styles.barLabel}>{label}</Text>
-        <Text style={styles.barCount}>{count}件</Text>
+    <View style={styles.rowBlock}>
+      <View style={styles.rowHeader}>
+        <Text style={styles.rowLabel}>{label}</Text>
+        <Text style={styles.rowValue}>{count}件</Text>
       </View>
-
-      <View style={styles.progressTrack}>
-        <View style={[styles.progressFill, { width: `${percent}%` }]} />
+      <View style={styles.track}>
+        <View style={[styles.fill, { width: `${percent}%` }]} />
       </View>
     </View>
   );
 }
 
-function TagRankRow({
-  rank,
-  label,
-  count,
+function RankList({
+  items,
+  emptyText,
 }: {
-  rank: number;
-  label: string;
-  count: number;
+  items: CountItem[];
+  emptyText: string;
 }) {
-  return (
-    <View style={styles.tagRankRow}>
-      <View style={styles.tagRankLeft}>
-        <View style={styles.rankBadge}>
-          <Text style={styles.rankBadgeText}>{rank}</Text>
-        </View>
-        <Text style={styles.tagRankLabel}>{label}</Text>
-      </View>
+  if (items.length === 0) {
+    return <Text style={styles.noDataText}>{emptyText}</Text>;
+  }
 
-      <Text style={styles.tagRankCount}>{count}件</Text>
-    </View>
+  return (
+    <>
+      {items.map((item, index) => (
+        <View key={item.label} style={styles.tagRow}>
+          <View style={styles.tagRowLeft}>
+            <View style={styles.rankBadge}>
+              <Text style={styles.rankBadgeText}>{index + 1}</Text>
+            </View>
+            <Text style={styles.tagLabel}>{item.label}</Text>
+          </View>
+          <Text style={styles.tagCount}>{item.count}件</Text>
+        </View>
+      ))}
+    </>
   );
 }
 
@@ -294,13 +295,11 @@ function toDateKey(date: Date) {
   const year = date.getFullYear();
   const month = `${date.getMonth() + 1}`.padStart(2, '0');
   const day = `${date.getDate()}`.padStart(2, '0');
-
   return `${year}-${month}-${day}`;
 }
 
 function calculateCurrentStreak(sortedDateKeysDesc: string[]) {
   if (sortedDateKeysDesc.length === 0) return 0;
-
   const dateSet = new Set(sortedDateKeysDesc);
   const todayKey = toDateKey(new Date());
   const yesterday = new Date();
@@ -308,7 +307,6 @@ function calculateCurrentStreak(sortedDateKeysDesc: string[]) {
   const yesterdayKey = toDateKey(yesterday);
 
   let baseKey: string | null = null;
-
   if (dateSet.has(todayKey)) {
     baseKey = todayKey;
   } else if (dateSet.has(yesterdayKey)) {
@@ -319,7 +317,6 @@ function calculateCurrentStreak(sortedDateKeysDesc: string[]) {
 
   let streak = 0;
   const cursor = new Date(baseKey);
-
   while (dateSet.has(toDateKey(cursor))) {
     streak += 1;
     cursor.setDate(cursor.getDate() - 1);
@@ -331,166 +328,165 @@ function calculateCurrentStreak(sortedDateKeysDesc: string[]) {
 const styles = StyleSheet.create({
   container: {
     flexGrow: 1,
-    backgroundColor: '#f7f8fa',
-    padding: 20,
+    backgroundColor: theme.colors.background,
+    padding: theme.spacing.xl,
     paddingBottom: 120,
   },
   title: {
-    fontSize: 28,
-    fontWeight: '700',
-    marginTop: 12,
-    marginBottom: 8,
-    color: '#111',
+    ...theme.typography.title,
+    color: theme.colors.text,
+    marginTop: theme.spacing.md,
+    marginBottom: theme.spacing.sm,
   },
   subtitle: {
-    fontSize: 14,
-    color: '#666',
-    marginBottom: 16,
+    ...theme.typography.body,
+    color: theme.colors.textMuted,
+    marginBottom: theme.spacing.xl,
   },
   emptyCard: {
-    backgroundColor: '#fff',
-    borderRadius: 14,
-    padding: 18,
+    ...cardShadow,
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.radius.xl,
     borderWidth: 1,
-    borderColor: '#e3e6eb',
+    borderColor: theme.colors.border,
+    padding: theme.spacing.xxl,
   },
   emptyTitle: {
-    fontSize: 17,
-    fontWeight: '700',
-    color: '#111',
-    marginBottom: 8,
+    ...theme.typography.section,
+    color: theme.colors.text,
+    marginBottom: theme.spacing.sm,
   },
   emptyText: {
-    fontSize: 14,
-    color: '#666',
-    lineHeight: 20,
+    ...theme.typography.body,
+    color: theme.colors.textMuted,
   },
   summaryGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 12,
-    marginBottom: 18,
+    gap: theme.spacing.md,
+    marginBottom: theme.spacing.lg,
   },
   summaryCard: {
+    ...cardShadow,
     width: '47%',
-    backgroundColor: '#fff',
-    borderRadius: 14,
-    padding: 16,
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.radius.lg,
     borderWidth: 1,
-    borderColor: '#e3e6eb',
+    borderColor: theme.colors.border,
+    padding: theme.spacing.lg,
   },
   summaryLabel: {
-    fontSize: 13,
-    color: '#666',
-    marginBottom: 10,
+    ...theme.typography.caption,
+    color: theme.colors.textSoft,
+    marginBottom: theme.spacing.sm,
   },
   summaryValue: {
-    fontSize: 22,
+    fontSize: 24,
     fontWeight: '700',
-    color: '#111',
+    color: theme.colors.text,
+  },
+  insightCard: {
+    backgroundColor: theme.colors.primarySoft,
+    borderRadius: theme.radius.xl,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    padding: theme.spacing.xl,
+    marginBottom: theme.spacing.lg,
+  },
+  insightCardSubtle: {
+    backgroundColor: theme.colors.surfaceMuted,
+  },
+  insightTitle: {
+    ...theme.typography.section,
+    color: theme.colors.primaryDark,
+    marginBottom: theme.spacing.sm,
+  },
+  insightTitleSubtle: {
+    color: theme.colors.text,
+  },
+  insightBody: {
+    ...theme.typography.body,
+    color: theme.colors.textMuted,
   },
   sectionCard: {
-    backgroundColor: '#fff',
-    borderRadius: 14,
-    padding: 16,
+    ...cardShadow,
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.radius.xl,
     borderWidth: 1,
-    borderColor: '#e3e6eb',
-    marginBottom: 14,
+    borderColor: theme.colors.border,
+    padding: theme.spacing.xl,
+    marginBottom: theme.spacing.md,
   },
   sectionTitle: {
-    fontSize: 17,
-    fontWeight: '700',
-    color: '#111',
-    marginBottom: 14,
+    ...theme.typography.section,
+    color: theme.colors.text,
+    marginBottom: theme.spacing.md,
   },
-  ratioRow: {
-    marginBottom: 14,
+  rowBlock: {
+    marginBottom: theme.spacing.md,
   },
-  ratioHeader: {
+  rowHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 8,
+    gap: theme.spacing.md,
+    marginBottom: theme.spacing.sm,
   },
-  ratioLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#222',
+  rowLabel: {
+    ...theme.typography.body,
+    color: theme.colors.text,
+    flex: 1,
   },
-  ratioValue: {
-    fontSize: 13,
-    color: '#666',
-    fontWeight: '600',
+  rowValue: {
+    ...theme.typography.caption,
+    color: theme.colors.textMuted,
   },
-  progressTrack: {
+  track: {
     height: 10,
-    borderRadius: 999,
-    backgroundColor: '#edf2f7',
+    borderRadius: theme.radius.pill,
+    backgroundColor: theme.colors.surfaceStrong,
     overflow: 'hidden',
   },
-  progressFill: {
+  fill: {
     height: '100%',
-    borderRadius: 999,
-    backgroundColor: '#2f6fed',
-  },
-  barRow: {
-    marginBottom: 14,
-  },
-  barHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: 12,
-    marginBottom: 8,
-  },
-  barLabel: {
-    flex: 1,
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#222',
-  },
-  barCount: {
-    fontSize: 13,
-    color: '#666',
-    fontWeight: '600',
+    borderRadius: theme.radius.pill,
+    backgroundColor: theme.colors.primary,
   },
   noDataText: {
-    fontSize: 14,
-    color: '#666',
+    ...theme.typography.body,
+    color: theme.colors.textMuted,
   },
-  tagRankRow: {
+  tagRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 8,
+    paddingVertical: 10,
     borderBottomWidth: 1,
-    borderBottomColor: '#f0f2f5',
+    borderBottomColor: theme.colors.border,
   },
-  tagRankLeft: {
+  tagRowLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: theme.spacing.sm,
     flex: 1,
   },
   rankBadge: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    backgroundColor: '#eef4ff',
+    width: 28,
+    height: 28,
+    borderRadius: theme.radius.pill,
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: theme.colors.primarySoft,
   },
   rankBadgeText: {
-    color: '#1d4ed8',
-    fontWeight: '700',
-    fontSize: 12,
+    ...theme.typography.caption,
+    color: theme.colors.primaryDark,
   },
-  tagRankLabel: {
-    fontSize: 14,
-    color: '#222',
-    fontWeight: '600',
+  tagLabel: {
+    ...theme.typography.body,
+    color: theme.colors.text,
   },
-  tagRankCount: {
-    fontSize: 13,
-    color: '#666',
-    fontWeight: '600',
+  tagCount: {
+    ...theme.typography.caption,
+    color: theme.colors.textMuted,
   },
 });

@@ -1,95 +1,94 @@
-import { useRouter } from 'expo-router';
-import { useState } from 'react';
-import {
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import { useFocusEffect, useRouter } from 'expo-router';
+import { useCallback, useMemo, useState } from 'react';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import SwipeTabPage from '../../components/SwipeTabPage';
-import { templates } from '../../data/templates';
+import { getMoodOption } from '../../data/reviewOptions';
+import { getReviews, type ReviewItem } from '../../lib/storage';
+import { buildInsightSummary } from '../../lib/insights';
+import { brand, cardShadow, theme } from '../../lib/theme';
 
 export default function CreateHomeScreen() {
   const router = useRouter();
-  const [showTemplates, setShowTemplates] = useState(false);
+  const [reviews, setReviews] = useState<ReviewItem[]>([]);
 
-  const handleStart = () => {
-    setShowTemplates(true);
-  };
+  useFocusEffect(
+    useCallback(() => {
+      void getReviews().then(setReviews);
+    }, [])
+  );
 
-  const handleSelectTemplate = (templateId: string) => {
-    router.push({
-      pathname: '/entry',
-      params: { templateId },
-    });
-  };
-
-  const handleRandom = () => {
-    router.push({
-      pathname: '/entry',
-      params: { templateId: 'random' },
-    });
-  };
+  const latestReview = reviews[0];
+  const latestMood = latestReview?.mood ? getMoodOption(latestReview.mood) : null;
+  const insight = useMemo(() => buildInsightSummary(reviews), [reviews]);
 
   return (
     <SwipeTabPage tabKey="index">
       <ScrollView contentContainerStyle={styles.container}>
-        <Text style={styles.title}>振り返りアプリ</Text>
-        <Text style={styles.subtitle}>
-          今日の出来事や気分を、気軽に残そう。
+        <Text style={styles.brand}>{brand.name}</Text>
+        <Text style={styles.heroTitle}>{brand.subtitle}</Text>
+        <Text style={styles.heroText}>
+          長文に寄せすぎず、今日を軽く見返せる記録を残します。
         </Text>
 
         <View style={styles.heroCard}>
-          <Text style={styles.heroTitle}>今日の振り返りを始める</Text>
-          <Text style={styles.heroText}>
-            テンプレを選んで、仕事もプラベもサクッと記録できます。
+          <View style={styles.heroHeader}>
+            <View style={styles.heroBadge}>
+              <Text style={styles.heroBadgeText}>Today</Text>
+            </View>
+            <Text style={styles.heroHint}>テンプレートを選んで始める</Text>
+          </View>
+
+          <Text style={styles.heroCardTitle}>今日のふりかえりを作成</Text>
+          <Text style={styles.heroCardText}>
+            テンプレートは並び替えできます。よく使う順にしておくと最短で書けます。
           </Text>
 
-          <Pressable style={styles.primaryButton} onPress={handleStart}>
-            <Text style={styles.primaryButtonText}>
-              {showTemplates ? 'テンプレを選んでください' : '振り返りを始める'}
-            </Text>
+          <Pressable
+            style={styles.primaryButton}
+            onPress={() => router.push('/templates')}
+          >
+            <Text style={styles.primaryButtonText}>テンプレートを選ぶ</Text>
           </Pressable>
         </View>
 
-        {showTemplates ? (
-          <View style={styles.templateSection}>
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>テンプレ一覧</Text>
-
-              <Pressable style={styles.randomButton} onPress={handleRandom}>
-                <Text style={styles.randomButtonText}>おまかせ</Text>
-              </Pressable>
-            </View>
-
-            {templates.map((template) => (
-              <Pressable
-                key={template.id}
-                style={styles.templateCard}
-                onPress={() => handleSelectTemplate(template.id)}
-              >
-                <View style={styles.templateTopRow}>
-                  <Text style={styles.templateName}>{template.name}</Text>
-                  <Text style={styles.templateArrow}>›</Text>
-                </View>
-
-                <Text style={styles.templateDescription}>
-                  {template.description}
+        {latestReview ? (
+          <View style={styles.latestCard}>
+            <Text style={styles.sectionLabel}>Latest</Text>
+            <Text style={styles.latestTitle}>直近の記録</Text>
+            <View style={styles.latestMetaRow}>
+              <Text style={styles.latestMeta}>{latestReview.templateName}</Text>
+              {latestMood ? (
+                <Text style={styles.latestMeta}>
+                  {latestMood.emoji} {latestMood.label}
                 </Text>
-
-                <Text style={styles.templateMode}>🧭 {template.mode}</Text>
-              </Pressable>
-            ))}
-          </View>
-        ) : (
-          <View style={styles.guideCard}>
-            <Text style={styles.guideTitle}>使えるテンプレ</Text>
-            <Text style={styles.guideText}>
-              一言日記 / KPT / YWT / よかったこと3つ など
+              ) : null}
+            </View>
+            <Text style={styles.latestBody}>
+              {new Date(latestReview.createdAt).toLocaleDateString('ja-JP')}
             </Text>
           </View>
-        )}
+        ) : null}
+
+        <View style={styles.insightCard}>
+          <Text style={styles.sectionLabel}>Weekly note</Text>
+          <Text style={styles.insightTitle}>{insight.weeklyTitle}</Text>
+          <Text style={styles.insightText}>{insight.weeklyBody}</Text>
+
+          <View style={styles.statsRow}>
+            {insight.weeklyStats.map((item) => (
+              <View key={item.label} style={styles.statCard}>
+                <Text style={styles.statLabel}>{item.label}</Text>
+                <Text style={styles.statValue}>{item.value}</Text>
+              </View>
+            ))}
+          </View>
+        </View>
+
+        <View style={styles.hintCard}>
+          <Text style={styles.sectionLabel}>Next step</Text>
+          <Text style={styles.hintTitle}>{insight.nextTitle}</Text>
+          <Text style={styles.hintText}>{insight.nextBody}</Text>
+        </View>
       </ScrollView>
     </SwipeTabPage>
   );
@@ -98,132 +97,168 @@ export default function CreateHomeScreen() {
 const styles = StyleSheet.create({
   container: {
     flexGrow: 1,
-    backgroundColor: '#f7f8fa',
-    padding: 20,
+    backgroundColor: theme.colors.background,
+    padding: theme.spacing.xl,
     paddingBottom: 120,
   },
-  title: {
-    fontSize: 28,
-    fontWeight: '700',
-    marginTop: 12,
-    marginBottom: 8,
-    color: '#111',
-  },
-  subtitle: {
-    fontSize: 14,
-    color: '#666',
-    marginBottom: 20,
-  },
-  heroCard: {
-    backgroundColor: '#ffffff',
-    borderRadius: 16,
-    padding: 18,
-    borderWidth: 1,
-    borderColor: '#e3e6eb',
-    marginBottom: 18,
+  brand: {
+    ...theme.typography.caption,
+    color: theme.colors.primaryDark,
+    letterSpacing: 0.8,
+    marginTop: theme.spacing.md,
+    marginBottom: theme.spacing.sm,
   },
   heroTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#111',
-    marginBottom: 8,
+    ...theme.typography.hero,
+    color: theme.colors.text,
+    marginBottom: theme.spacing.md,
   },
   heroText: {
-    fontSize: 14,
-    color: '#555',
-    lineHeight: 20,
-    marginBottom: 16,
+    ...theme.typography.body,
+    color: theme.colors.textMuted,
+    marginBottom: theme.spacing.xxl,
+  },
+  heroCard: {
+    ...cardShadow,
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.radius.xl,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    padding: theme.spacing.xxl,
+    marginBottom: theme.spacing.lg,
+  },
+  heroHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: theme.spacing.md,
+  },
+  heroBadge: {
+    backgroundColor: theme.colors.primarySoft,
+    borderRadius: theme.radius.pill,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: 6,
+  },
+  heroBadgeText: {
+    ...theme.typography.caption,
+    color: theme.colors.primaryDark,
+  },
+  heroHint: {
+    ...theme.typography.caption,
+    color: theme.colors.textSoft,
+  },
+  heroCardTitle: {
+    ...theme.typography.section,
+    color: theme.colors.text,
+    marginBottom: theme.spacing.sm,
+  },
+  heroCardText: {
+    ...theme.typography.body,
+    color: theme.colors.textMuted,
+    marginBottom: theme.spacing.xl,
   },
   primaryButton: {
-    backgroundColor: '#111',
-    borderRadius: 12,
-    paddingVertical: 14,
+    backgroundColor: theme.colors.primary,
+    borderRadius: theme.radius.lg,
+    paddingVertical: 15,
     alignItems: 'center',
   },
   primaryButtonText: {
-    color: '#fff',
     fontSize: 15,
     fontWeight: '700',
+    color: theme.colors.white,
   },
-  guideCard: {
-    backgroundColor: '#fff',
-    borderRadius: 14,
-    padding: 16,
+  latestCard: {
+    ...cardShadow,
+    backgroundColor: theme.colors.surfaceMuted,
+    borderRadius: theme.radius.xl,
     borderWidth: 1,
-    borderColor: '#e3e6eb',
+    borderColor: theme.colors.border,
+    padding: theme.spacing.xl,
+    marginBottom: theme.spacing.lg,
   },
-  guideTitle: {
+  sectionLabel: {
+    ...theme.typography.caption,
+    color: theme.colors.textSoft,
+    marginBottom: theme.spacing.sm,
+    textTransform: 'uppercase',
+  },
+  latestTitle: {
+    ...theme.typography.section,
+    color: theme.colors.text,
+    marginBottom: theme.spacing.sm,
+  },
+  latestMetaRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: theme.spacing.md,
+    marginBottom: theme.spacing.sm,
+  },
+  latestMeta: {
+    ...theme.typography.caption,
+    color: theme.colors.textMuted,
+  },
+  latestBody: {
+    ...theme.typography.body,
+    color: theme.colors.text,
+  },
+  insightCard: {
+    ...cardShadow,
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.radius.xl,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    padding: theme.spacing.xl,
+    marginBottom: theme.spacing.lg,
+  },
+  insightTitle: {
+    ...theme.typography.section,
+    color: theme.colors.text,
+    marginBottom: theme.spacing.sm,
+  },
+  insightText: {
+    ...theme.typography.body,
+    color: theme.colors.textMuted,
+    marginBottom: theme.spacing.lg,
+  },
+  statsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: theme.spacing.sm,
+  },
+  statCard: {
+    minWidth: '31%',
+    backgroundColor: theme.colors.surfaceMuted,
+    borderRadius: theme.radius.lg,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    padding: theme.spacing.md,
+  },
+  statLabel: {
+    ...theme.typography.caption,
+    color: theme.colors.textSoft,
+    marginBottom: 4,
+  },
+  statValue: {
     fontSize: 15,
     fontWeight: '700',
-    color: '#111',
-    marginBottom: 8,
+    color: theme.colors.text,
   },
-  guideText: {
-    fontSize: 14,
-    color: '#666',
-    lineHeight: 20,
-  },
-  templateSection: {
-    marginTop: 4,
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#111',
-  },
-  randomButton: {
-    backgroundColor: '#eef4ff',
+  hintCard: {
+    backgroundColor: theme.colors.primarySoft,
+    borderRadius: theme.radius.xl,
     borderWidth: 1,
-    borderColor: '#bfd3ff',
-    borderRadius: 999,
-    paddingVertical: 8,
-    paddingHorizontal: 14,
+    borderColor: theme.colors.border,
+    padding: theme.spacing.xl,
+    marginBottom: theme.spacing.lg,
   },
-  randomButtonText: {
-    color: '#1d4ed8',
-    fontSize: 13,
-    fontWeight: '700',
+  hintTitle: {
+    ...theme.typography.section,
+    color: theme.colors.primaryDark,
+    marginBottom: theme.spacing.sm,
   },
-  templateCard: {
-    backgroundColor: '#fff',
-    borderRadius: 14,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: '#e3e6eb',
-    marginBottom: 12,
-  },
-  templateTopRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  templateName: {
-    fontSize: 17,
-    fontWeight: '700',
-    color: '#111',
-  },
-  templateArrow: {
-    fontSize: 24,
-    color: '#999',
-    fontWeight: '400',
-    marginTop: -2,
-  },
-  templateDescription: {
-    fontSize: 14,
-    color: '#666',
-    lineHeight: 20,
-    marginBottom: 8,
-  },
-  templateMode: {
-    fontSize: 13,
-    color: '#2f6fed',
-    fontWeight: '600',
+  hintText: {
+    ...theme.typography.body,
+    color: theme.colors.textMuted,
   },
 });

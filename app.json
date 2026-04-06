@@ -1,19 +1,33 @@
 {
   "expo": {
-    "name": "furikaeri-app",
+    "name": "Daynote",
     "slug": "furikaeri-app",
     "version": "1.0.0",
     "orientation": "portrait",
     "scheme": "furikaeriapp",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
+    "icon": "./assets/images/icon.png",
+    "splash": {
+      "image": "./assets/images/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#f6f1ea"
+    },
+    "web": {
+      "favicon": "./assets/images/favicon.png"
+    },
     "ios": {
       "supportsTablet": true
     },
     "android": {
       "package": "com.oqt98.furikaeriapp",
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/android-icon-foreground.png",
+        "backgroundImage": "./assets/images/android-icon-background.png",
+        "monochromeImage": "./assets/images/android-icon-monochrome.png"
+      }
     },
     "plugins": [
       "expo-router"
