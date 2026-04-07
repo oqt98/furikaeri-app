@@ -15,7 +15,7 @@ function createReview(overrides: Partial<Parameters<typeof saveReview>[0]> = {})
     templateName: templates[0].name,
     actionTagIds: [],
     stateTagIds: [],
-    answers: { memo: 'テストメモ' },
+    answers: { title: 'テストメモ' },
     photos: [],
     isFavorite: false,
     ...overrides,

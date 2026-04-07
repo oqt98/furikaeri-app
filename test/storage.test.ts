@@ -22,7 +22,7 @@ function createReview(overrides = {}) {
     templateName: templates[0].name,
     actionTagIds: ['action-reading'],
     stateTagIds: ['state-relaxed'],
-    answers: { memo: 'メモ' },
+    answers: { title: 'テスト' },
     photos: [],
     isFavorite: false,
     ...overrides,
@@ -80,9 +80,7 @@ describe('lib/storage', () => {
     expect(saved).toHaveLength(1);
     expect(saved[0].actionTagIds).toEqual(['action-reading']);
     expect(saved[0].stateTagIds).toEqual(['state-relaxed']);
-    expect(
-      saved[0].photos.map((photo) => ({ id: photo.id, order: photo.order }))
-    ).toEqual([
+    expect(saved[0].photos.map((photo) => ({ id: photo.id, order: photo.order }))).toEqual([
       { id: 'photo-1', order: 0 },
       { id: 'photo-2', order: 1 },
     ]);
@@ -194,7 +192,7 @@ describe('lib/storage', () => {
         action: [
           {
             id: 'action-custom',
-            label: '散歩',
+            label: '整理',
             type: 'action',
             isArchived: true,
           },
@@ -203,11 +201,11 @@ describe('lib/storage', () => {
       })
     );
 
-    const created = await createTag('action', '  散歩  ');
+    const created = await createTag('action', '  整理  ');
     const tagCatalog = await getTagCatalog();
 
     expect(created?.id).toBe('action-custom');
-    expect(tagCatalog.action.filter((tag) => tag.label === '散歩')).toHaveLength(1);
+    expect(tagCatalog.action.filter((tag) => tag.label === '整理')).toHaveLength(1);
     expect(tagCatalog.action.find((tag) => tag.id === 'action-custom')?.isArchived).toBe(
       false
     );

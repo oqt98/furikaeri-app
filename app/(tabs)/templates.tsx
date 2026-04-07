@@ -20,25 +20,24 @@ export default function TemplatesScreen() {
     }, [])
   );
 
+  const handleSelectTemplate = (templateId?: string) => {
+    router.push({
+      pathname: '/entry',
+      params: date ? { templateId, date } : { templateId },
+    });
+  };
+
   return (
     <ScrollView contentContainerStyle={styles.container}>
       <BackHeader
         title="テンプレートを選ぶ"
-        subtitle="その日の気分に合う書き方を、ひとつ選ぶだけです。"
+        subtitle="その日の気分に合わせて、書きやすい形を選べます。"
       />
 
-      <Pressable
-        style={styles.quickCard}
-        onPress={() =>
-          router.push({
-            pathname: '/entry',
-            params: date ? { templateId: items[0]?.id, date } : { templateId: items[0]?.id },
-          })
-        }
-      >
+      <Pressable style={styles.quickCard} onPress={() => handleSelectTemplate(items[0]?.id)}>
         <View style={styles.quickText}>
-          <Text style={styles.quickTitle}>まずはシンプルに書く</Text>
-          <Text style={styles.quickBody}>「ひとことメモ」で、すぐに記録を始められます。</Text>
+          <Text style={styles.quickTitle}>まずはシンプルに記録</Text>
+          <Text style={styles.quickBody}>迷ったら最初のテンプレートから始められます。</Text>
         </View>
         <Ionicons name="flash-outline" size={20} color={theme.colors.primaryDark} />
       </Pressable>
@@ -47,12 +46,7 @@ export default function TemplatesScreen() {
         <Pressable
           key={item.id}
           style={styles.templateCard}
-          onPress={() =>
-            router.push({
-              pathname: '/entry',
-              params: date ? { templateId: item.id, date } : { templateId: item.id },
-            })
-          }
+          onPress={() => handleSelectTemplate(item.id)}
         >
           <View style={styles.templateHeader}>
             <Text style={styles.templateTitle}>{item.name}</Text>

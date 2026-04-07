@@ -1,5 +1,5 @@
 export const MOOD_OPTIONS = [
-  { value: 1, emoji: '😣', label: 'かなりつかれた' },
+  { value: 1, emoji: '😣', label: 'かなりしんどい' },
   { value: 2, emoji: '😕', label: '少ししんどい' },
   { value: 3, emoji: '🙂', label: 'ふつう' },
   { value: 4, emoji: '😊', label: 'よかった' },

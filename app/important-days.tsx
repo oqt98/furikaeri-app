@@ -17,10 +17,10 @@ import {
   getImportantDays,
   IMPORTANT_DAY_TYPES,
   isValidImportantDayDate,
+  saveImportantDay,
   type ImportantDay,
   type ImportantDayType,
 } from '../lib/importantDays';
-import { saveImportantDay } from '../lib/importantDays';
 import { useAppTheme } from '../lib/theme-context';
 import { createCardShadow } from '../lib/theme';
 
@@ -107,6 +107,7 @@ export default function ImportantDaysScreen() {
       Alert.alert('名前を入力してください');
       return;
     }
+
     if (!isValidImportantDayDate(date)) {
       Alert.alert('日付を正しく入力してください');
       return;
@@ -117,7 +118,9 @@ export default function ImportantDaysScreen() {
       name,
       date,
       type,
+      isRecurringAnnual: true,
     });
+
     resetForm();
     await load();
   };
@@ -126,7 +129,7 @@ export default function ImportantDaysScreen() {
     <ScrollView contentContainerStyle={styles.container}>
       <BackHeader
         title="大切な日"
-        subtitle="カレンダーでも、年・月・日入力でも登録できます。"
+        subtitle="カレンダーでも、年・月・日入力でも登録できます。登録した日は毎年くり返し扱います。"
       />
 
       <View style={styles.formCard}>
@@ -145,7 +148,9 @@ export default function ImportantDaysScreen() {
           <TextInput
             style={[styles.input, styles.partInputYear]}
             value={yearInput}
-            onChangeText={(value) => syncDateFromParts(value.replace(/[^\d]/g, '').slice(0, 4), monthInput, dayInput)}
+            onChangeText={(value) =>
+              syncDateFromParts(value.replace(/[^\d]/g, '').slice(0, 4), monthInput, dayInput)
+            }
             placeholder="年"
             keyboardType="number-pad"
             placeholderTextColor={theme.colors.textSoft}
@@ -153,7 +158,9 @@ export default function ImportantDaysScreen() {
           <TextInput
             style={[styles.input, styles.partInput]}
             value={monthInput}
-            onChangeText={(value) => syncDateFromParts(yearInput, value.replace(/[^\d]/g, '').slice(0, 2), dayInput)}
+            onChangeText={(value) =>
+              syncDateFromParts(yearInput, value.replace(/[^\d]/g, '').slice(0, 2), dayInput)
+            }
             placeholder="月"
             keyboardType="number-pad"
             placeholderTextColor={theme.colors.textSoft}
@@ -161,7 +168,9 @@ export default function ImportantDaysScreen() {
           <TextInput
             style={[styles.input, styles.partInput]}
             value={dayInput}
-            onChangeText={(value) => syncDateFromParts(yearInput, monthInput, value.replace(/[^\d]/g, '').slice(0, 2))}
+            onChangeText={(value) =>
+              syncDateFromParts(yearInput, monthInput, value.replace(/[^\d]/g, '').slice(0, 2))
+            }
             placeholder="日"
             keyboardType="number-pad"
             placeholderTextColor={theme.colors.textSoft}
@@ -189,9 +198,11 @@ export default function ImportantDaysScreen() {
             >
               <Ionicons name="chevron-back" size={18} color={theme.colors.primaryDark} />
             </Pressable>
+
             <Text style={styles.monthLabel}>
               {calendarMonth.getFullYear()}年 {calendarMonth.getMonth() + 1}月
             </Text>
+
             <Pressable
               style={styles.monthButton}
               onPress={() =>
@@ -257,6 +268,8 @@ export default function ImportantDaysScreen() {
           })}
         </View>
 
+        <Text style={styles.helperText}>登録した日は毎年同じ月日でカレンダーに表示されます。</Text>
+
         <View style={styles.formActions}>
           {editingId ? (
             <Pressable style={styles.cancelButton} onPress={resetForm}>
@@ -272,7 +285,7 @@ export default function ImportantDaysScreen() {
       {items.length === 0 ? (
         <View style={styles.emptyCard}>
           <Text style={styles.emptyTitle}>まだ登録はありません</Text>
-          <Text style={styles.emptyBody}>気になる日を1件だけでも追加しておくと見返しやすくなります。</Text>
+          <Text style={styles.emptyBody}>誕生日や記念日をひとつだけでも入れておくと、見返しやすくなります。</Text>
         </View>
       ) : (
         items.map((item) => (
@@ -281,7 +294,7 @@ export default function ImportantDaysScreen() {
               <View style={styles.itemText}>
                 <Text style={styles.itemName}>{item.name}</Text>
                 <Text style={styles.itemMeta}>
-                  {item.type} ・ {item.date} ・ {formatImportantDayCountdown(item.date)}
+                  {item.type} ・ {item.date} ・ {formatImportantDayCountdown(item.date, item.isRecurringAnnual)}
                 </Text>
               </View>
               <Pressable
@@ -372,6 +385,11 @@ function createStyles(theme: ReturnType<typeof useAppTheme>['theme']) {
       ...theme.typography.caption,
       color: theme.colors.textSoft,
       marginBottom: theme.spacing.sm,
+    },
+    helperText: {
+      ...theme.typography.caption,
+      color: theme.colors.textSoft,
+      marginBottom: theme.spacing.lg,
     },
     input: {
       backgroundColor: theme.colors.surfaceMuted,
@@ -466,7 +484,7 @@ function createStyles(theme: ReturnType<typeof useAppTheme>['theme']) {
       flexDirection: 'row',
       flexWrap: 'wrap',
       gap: theme.spacing.sm,
-      marginBottom: theme.spacing.lg,
+      marginBottom: theme.spacing.md,
     },
     typeChip: {
       borderRadius: theme.radius.pill,

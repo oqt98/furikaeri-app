@@ -23,9 +23,16 @@ export const templates: ReviewTemplate[] = [
   {
     id: 'diary',
     name: '今日のタイトル',
-    description: 'まずは1日の印象をひとことタイトルで残したいときに向いています。',
+    description: 'まずは1日の印象を短いタイトルで残したい日に向いています。',
     mode: 'さっと記録',
     fields: [{ key: 'title', label: '今日のタイトル', multiline: true }],
+  },
+  {
+    id: 'memo',
+    name: 'ひとことメモ',
+    description: '自由なひとことだけを残したいときのシンプルなテンプレートです。',
+    mode: 'さっと記録',
+    fields: [{ key: 'memo', label: 'ひとことメモ', multiline: true }],
   },
   {
     id: 'kpt',

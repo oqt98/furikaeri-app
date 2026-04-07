@@ -21,11 +21,7 @@ import {
 } from '../../data/reviewOptions';
 import { templates } from '../../data/templates';
 import type { TagDefinition } from '../../data/tags';
-import {
-  clearEntryDraft,
-  getEntryDraft,
-  saveEntryDraft,
-} from '../../lib/entryDraft';
+import { clearEntryDraft, getEntryDraft, saveEntryDraft } from '../../lib/entryDraft';
 import {
   DuplicateReviewDateError,
   getReviewByDateKey,
@@ -39,7 +35,7 @@ import {
 import { useAppTheme } from '../../lib/theme-context';
 import { createCardShadow } from '../../lib/theme';
 
-const COMMON_MEMO_KEY = 'memo';
+const MEMO_FIELD_KEY = 'memo';
 
 type TagCatalogState = {
   action: TagDefinition[];
@@ -56,8 +52,7 @@ export default function EntryScreen() {
   const styles = useMemo(() => createStyles(theme), [theme]);
   const isEditMode = Boolean(reviewId);
   const draftKey = isEditMode ? `edit:${reviewId}` : 'new';
-  const requestedTemplate =
-    templates.find((item) => item.id === templateId) ?? templates[0];
+  const requestedTemplate = templates.find((item) => item.id === templateId) ?? templates[0];
   const requestedDateKey = isValidDateKey(date) ? date : toDateKey(new Date());
 
   const [selectedTemplateId, setSelectedTemplateId] = useState(requestedTemplate.id);
@@ -73,11 +68,9 @@ export default function EntryScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [isDraftReady, setIsDraftReady] = useState(false);
 
-  const selectedTemplate =
-    templates.find((item) => item.id === selectedTemplateId) ?? templates[0];
-  const templateQuestions = selectedTemplate.fields.filter(
-    (field) => field.key !== COMMON_MEMO_KEY
-  );
+  const selectedTemplate = templates.find((item) => item.id === selectedTemplateId) ?? templates[0];
+  const visibleTemplateFields = getVisibleTemplateFields(selectedTemplate.id);
+  const showMemoField = shouldShowMemoField(selectedTemplate.id);
   const saveLabel = isEditMode ? '更新する' : '保存する';
 
   const loadTagCatalog = useCallback(async () => {
@@ -108,18 +101,13 @@ export default function EntryScreen() {
             router.replace('/(tabs)/history');
             return;
           }
+
           if (!isMounted) return;
 
           const mergedTemplateId = draft?.templateId ?? review.templateId ?? templates[0].id;
-          const mergedTemplate =
-            templates.find((item) => item.id === mergedTemplateId) ?? templates[0];
-          const mergedAnswers = filterAnswersForTemplate(
-            draft?.answers ?? review.answers ?? {},
-            mergedTemplate.id
-          );
 
           setEditingReview(review);
-          setSelectedTemplateId(mergedTemplate.id);
+          setSelectedTemplateId(mergedTemplateId);
           setSelectedDateKey(
             draft?.selectedDateKey && isValidDateKey(draft.selectedDateKey)
               ? draft.selectedDateKey
@@ -127,24 +115,20 @@ export default function EntryScreen() {
           );
           setCategory(draft?.category ?? review.category);
           setMood(draft?.mood ?? review.mood ?? 3);
-          setAnswers(mergedAnswers);
+          setAnswers(draft?.answers ?? review.answers ?? {});
           setActionTagIds(draft?.actionTagIds ?? review.actionTagIds ?? []);
           setStateTagIds(draft?.stateTagIds ?? review.stateTagIds ?? []);
           setPhotos(draft?.photos ?? review.photos ?? []);
         } else {
           const nextTemplateId = templateId ?? draft?.templateId ?? templates[0].id;
-          const nextTemplate =
-            templates.find((item) => item.id === nextTemplateId) ?? templates[0];
           const nextDateKey =
-            (isValidDateKey(date) ? date : undefined) ??
-            draft?.selectedDateKey ??
-            toDateKey(new Date());
+            (isValidDateKey(date) ? date : undefined) ?? draft?.selectedDateKey ?? toDateKey(new Date());
 
-          setSelectedTemplateId(nextTemplate.id);
+          setSelectedTemplateId(nextTemplateId);
           setSelectedDateKey(isValidDateKey(nextDateKey) ? nextDateKey : requestedDateKey);
           setCategory(draft?.category ?? CATEGORIES[0]);
           setMood(draft?.mood ?? 3);
-          setAnswers(filterAnswersForTemplate(draft?.answers ?? {}, nextTemplate.id));
+          setAnswers(draft?.answers ?? {});
           setActionTagIds(draft?.actionTagIds ?? []);
           setStateTagIds(draft?.stateTagIds ?? []);
           setPhotos(draft?.photos ?? []);
@@ -170,11 +154,7 @@ export default function EntryScreen() {
   useEffect(() => {
     if (isLoading || !isDraftReady || isEditMode) return;
     if (!templateId || templateId === selectedTemplateId) return;
-
-    const nextTemplate =
-      templates.find((item) => item.id === templateId) ?? templates[0];
-    setSelectedTemplateId(nextTemplate.id);
-    setAnswers((current) => filterAnswersForTemplate(current, nextTemplate.id));
+    setSelectedTemplateId(templateId);
   }, [isDraftReady, isEditMode, isLoading, selectedTemplateId, templateId]);
 
   useEffect(() => {
@@ -241,14 +221,15 @@ export default function EntryScreen() {
       return;
     }
 
+    const answersForSave = getAnswersForSave(answers, selectedTemplate.id);
     const hasInput =
-      Object.values(answers).some((value) => value.trim()) ||
+      Object.values(answersForSave).some((value) => value.trim()) ||
       actionTagIds.length > 0 ||
       stateTagIds.length > 0 ||
       photos.length > 0;
 
     if (!hasInput) {
-      Alert.alert('入力がまだありません', 'ひとことだけでも残してから保存してください。');
+      Alert.alert('入力がまだありません', 'ひとつでも内容を入れてから保存してください。');
       return;
     }
 
@@ -257,7 +238,7 @@ export default function EntryScreen() {
       if (existingReview) {
         Alert.alert(
           '同じ日付の記録があります',
-          'その日の記録は1件までです。既存の記録を編集してください。'
+          '1日1件ルールのため、その日の記録は既存の内容を編集してください。'
         );
         return;
       }
@@ -272,7 +253,7 @@ export default function EntryScreen() {
         templateName: selectedTemplate.name,
         actionTagIds,
         stateTagIds,
-        answers: filterAnswersForTemplate(answers, selectedTemplate.id),
+        answers: answersForSave,
         photos: photos.map((photo, index) => ({ ...photo, order: index })),
         isFavorite: editingReview?.isFavorite ?? false,
       };
@@ -341,7 +322,7 @@ export default function EntryScreen() {
           placeholderTextColor={theme.colors.textSoft}
           autoCapitalize="none"
         />
-        <Text style={styles.helperText}>あとから見返しやすいように、日付をそろえて残せます。</Text>
+        <Text style={styles.helperText}>1日1件のルールを保ったまま、あとから見返しやすく残せます。</Text>
       </View>
 
       <ChoiceSection title="気分" styles={styles}>
@@ -409,29 +390,32 @@ export default function EntryScreen() {
         }
       />
 
-      <View style={styles.sectionCard}>
-        <Text style={styles.sectionLabel}>ひとことメモ</Text>
-        <TextInput
-          style={styles.memoInput}
-          multiline
-          textAlignVertical="top"
-          placeholder="今日のひとことを短く残せます"
-          placeholderTextColor={theme.colors.textSoft}
-          value={answers[COMMON_MEMO_KEY] ?? ''}
-          onChangeText={(text) =>
-            setAnswers((prev) => ({
-              ...prev,
-              [COMMON_MEMO_KEY]: text,
-            }))
-          }
-        />
-      </View>
+      {showMemoField ? (
+        <View style={styles.sectionCard}>
+          <Text style={styles.sectionLabel}>ひとことメモ</Text>
+          <TextInput
+            testID="entry-memo-input"
+            style={styles.memoInput}
+            multiline
+            textAlignVertical="top"
+            placeholder="今日のひとことを短く残せます"
+            placeholderTextColor={theme.colors.textSoft}
+            value={answers[MEMO_FIELD_KEY] ?? ''}
+            onChangeText={(text) =>
+              setAnswers((prev) => ({
+                ...prev,
+                [MEMO_FIELD_KEY]: text,
+              }))
+            }
+          />
+        </View>
+      ) : null}
 
-      {templateQuestions.length > 0 ? (
+      {visibleTemplateFields.length > 0 ? (
         <View style={styles.sectionCard}>
           <Text style={styles.sectionLabel}>テンプレ質問</Text>
           <Text style={styles.sectionTitle}>{selectedTemplate.name}の質問</Text>
-          {templateQuestions.map((field) => (
+          {visibleTemplateFields.map((field) => (
             <View key={field.key} style={styles.fieldBlock}>
               <Text style={styles.fieldLabel}>{field.label}</Text>
               <TextInput
@@ -542,6 +526,7 @@ function TagChoiceSection({
           <Text style={styles.manageLink}>{manageLabel}</Text>
         </Pressable>
       </View>
+
       {tags.length === 0 ? (
         <Text style={styles.helperText}>タグがまだありません。管理から追加できます。</Text>
       ) : (
@@ -566,9 +551,21 @@ function TagChoiceSection({
   );
 }
 
-function filterAnswersForTemplate(currentAnswers: Record<string, string>, templateId: string) {
+export function shouldShowMemoField(templateId: string) {
   const template = templates.find((item) => item.id === templateId) ?? templates[0];
-  const allowedKeys = new Set([COMMON_MEMO_KEY, ...template.fields.map((field) => field.key)]);
+  return template.fields.some((field) => field.key === MEMO_FIELD_KEY);
+}
+
+export function getVisibleTemplateFields(templateId: string) {
+  const template = templates.find((item) => item.id === templateId) ?? templates[0];
+  return template.fields.filter((field) => field.key !== MEMO_FIELD_KEY);
+}
+
+export function getAnswersForSave(currentAnswers: Record<string, string>, templateId: string) {
+  const allowedKeys = new Set(getVisibleTemplateFields(templateId).map((field) => field.key));
+  if (shouldShowMemoField(templateId)) {
+    allowedKeys.add(MEMO_FIELD_KEY);
+  }
 
   return Object.fromEntries(
     Object.entries(currentAnswers).filter(

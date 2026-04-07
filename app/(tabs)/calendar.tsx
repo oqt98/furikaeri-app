@@ -12,13 +12,20 @@ import {
 import SwipeTabPage from '../../components/SwipeTabPage';
 import { getMoodOption } from '../../data/reviewOptions';
 import {
+  formatImportantDayCountdown,
+  getImportantDays,
+  getImportantDaysForDateKey,
+  type ImportantDay,
+} from '../../lib/importantDays';
+import {
   deleteReview,
   getReviews,
   getTagCatalog,
   toggleFavoriteReview,
   type ReviewItem,
 } from '../../lib/storage';
-import { cardShadow, theme } from '../../lib/theme';
+import { useAppTheme } from '../../lib/theme-context';
+import { createCardShadow, getTheme } from '../../lib/theme';
 
 type CalendarCell = {
   date: Date;
@@ -30,7 +37,10 @@ type CalendarCell = {
 const WEEK_LABELS = ['日', '月', '火', '水', '木', '金', '土'];
 
 export default function CalendarScreen() {
+  const { theme } = useAppTheme();
+  const styles = useMemo(() => createCalendarStyles(theme), [theme]);
   const [reviews, setReviews] = useState<ReviewItem[]>([]);
+  const [importantDays, setImportantDays] = useState<ImportantDay[]>([]);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [favoriteLoadingId, setFavoriteLoadingId] = useState<string | null>(null);
   const [currentMonth, setCurrentMonth] = useState(() => {
@@ -40,18 +50,23 @@ export default function CalendarScreen() {
   const [selectedDateKey, setSelectedDateKey] = useState(toDateKey(new Date()));
   const [tagLabelMap, setTagLabelMap] = useState<Map<string, string>>(new Map());
 
-  const loadReviews = async () => {
-    const [data, tagCatalog] = await Promise.all([getReviews(), getTagCatalog()]);
+  const loadData = useCallback(async () => {
+    const [data, tagCatalog, importantDayList] = await Promise.all([
+      getReviews(),
+      getTagCatalog(),
+      getImportantDays(),
+    ]);
     setReviews(data);
+    setImportantDays(importantDayList);
     setTagLabelMap(
       new Map([...tagCatalog.action, ...tagCatalog.state].map((tag) => [tag.id, tag.label]))
     );
-  };
+  }, []);
 
   useFocusEffect(
     useCallback(() => {
-      void loadReviews();
-    }, [])
+      void loadData();
+    }, [loadData])
   );
 
   const reviewsByDate = useMemo(() => {
@@ -75,6 +90,10 @@ export default function CalendarScreen() {
       }),
     [reviewsByDate, selectedDateKey]
   );
+  const selectedImportantDays = useMemo(
+    () => getImportantDaysForDateKey(selectedDateKey, importantDays),
+    [importantDays, selectedDateKey]
+  );
 
   const handleCreate = () => {
     router.push({
@@ -94,7 +113,7 @@ export default function CalendarScreen() {
     try {
       setDeletingId(id);
       await deleteReview(id);
-      await loadReviews();
+      await loadData();
     } catch (error) {
       console.error(error);
       Alert.alert('削除に失敗しました');
@@ -107,10 +126,10 @@ export default function CalendarScreen() {
     try {
       setFavoriteLoadingId(item.id);
       await toggleFavoriteReview(item.id);
-      await loadReviews();
+      await loadData();
     } catch (error) {
       console.error(error);
-      Alert.alert('お気に入り更新に失敗しました');
+      Alert.alert('お気に入りの更新に失敗しました');
     } finally {
       setFavoriteLoadingId(null);
     }
@@ -118,19 +137,20 @@ export default function CalendarScreen() {
 
   return (
     <SwipeTabPage tabKey="calendar">
-      <ScrollView testID="screen-calendar" contentContainerStyle={styles.container}>
+      <ScrollView
+        testID="screen-calendar"
+        contentContainerStyle={styles.container}
+      >
         <Text style={styles.title}>カレンダー</Text>
         <Text style={styles.subtitle}>
-          お気に入りがある日は強めに目立たせています。
+          日付ごとに記録と大切な日をまとめて見返せます。
         </Text>
 
         <View style={styles.monthCard}>
           <Pressable
             style={styles.monthButton}
             onPress={() =>
-              setCurrentMonth(
-                (prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1)
-              )
+              setCurrentMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))
             }
           >
             <Ionicons name="chevron-back" size={18} color={theme.colors.primaryDark} />
@@ -140,15 +160,13 @@ export default function CalendarScreen() {
             <Text style={styles.monthLabel}>
               {currentMonth.getFullYear()}年 {currentMonth.getMonth() + 1}月
             </Text>
-            <Text style={styles.monthCaption}>件数とお気に入りを日ごとに表示</Text>
+            <Text style={styles.monthCaption}>記録数と大切な日を日付ごとに表示します</Text>
           </View>
 
           <Pressable
             style={styles.monthButton}
             onPress={() =>
-              setCurrentMonth(
-                (prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1)
-              )
+              setCurrentMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1))
             }
           >
             <Ionicons name="chevron-forward" size={18} color={theme.colors.primaryDark} />
@@ -167,17 +185,20 @@ export default function CalendarScreen() {
           <View style={styles.grid}>
             {calendarCells.map((cell) => {
               const dayReviews = reviewsByDate[cell.dateKey] ?? [];
+              const dayImportantDays = getImportantDaysForDateKey(cell.dateKey, importantDays);
               const count = dayReviews.length;
               const hasFavorite = dayReviews.some((item) => item.isFavorite);
+              const hasImportantDay = dayImportantDays.length > 0;
               const selected = cell.dateKey === selectedDateKey;
               const today = cell.dateKey === toDateKey(new Date());
 
               return (
                 <Pressable
                   key={cell.dateKey}
+                  testID={`calendar-day-${cell.dateKey}`}
                   style={[
                     styles.dayCell,
-                    getHeatStyle(count),
+                    getHeatStyle(count, theme.name),
                     selected && styles.dayCellSelected,
                     hasFavorite && !selected && styles.favoriteDayCell,
                     !cell.isCurrentMonth && styles.dayCellOutside,
@@ -188,9 +209,7 @@ export default function CalendarScreen() {
                       cell.date.getFullYear() !== currentMonth.getFullYear() ||
                       cell.date.getMonth() !== currentMonth.getMonth()
                     ) {
-                      setCurrentMonth(
-                        new Date(cell.date.getFullYear(), cell.date.getMonth(), 1)
-                      );
+                      setCurrentMonth(new Date(cell.date.getFullYear(), cell.date.getMonth(), 1));
                     }
                   }}
                 >
@@ -202,6 +221,17 @@ export default function CalendarScreen() {
                       style={styles.favoriteDayIcon}
                     />
                   ) : null}
+
+                  {hasImportantDay ? (
+                    <View
+                      testID={`calendar-important-day-marker-${cell.dateKey}`}
+                      style={[
+                        styles.importantDayDot,
+                        selected && styles.importantDayDotSelected,
+                      ]}
+                    />
+                  ) : null}
+
                   <Text
                     style={[
                       styles.dayText,
@@ -223,21 +253,41 @@ export default function CalendarScreen() {
 
         <View style={styles.sectionHeader}>
           <View>
-            <Text style={styles.sectionLabel}>Selected day</Text>
+            <Text style={styles.sectionLabel}>選択中の日付</Text>
             <Text style={styles.sectionTitle}>{formatDateLabel(selectedDateKey)}</Text>
           </View>
 
           <Pressable testID="calendar-create-button" style={styles.createButton} onPress={handleCreate}>
             <Ionicons name="add" size={16} color={theme.colors.white} />
-            <Text style={styles.createButtonText}>この日に作成</Text>
+            <Text style={styles.createButtonText}>この日に記録</Text>
           </Pressable>
         </View>
 
+        {selectedImportantDays.length > 0 ? (
+          <View style={styles.importantDaysCard}>
+            <Text style={styles.importantDaysTitle}>大切な日</Text>
+            {selectedImportantDays.map((item) => (
+              <View key={item.id} style={styles.importantDayRow}>
+                <View style={styles.importantDayBadge}>
+                  <Ionicons name="sparkles-outline" size={14} color={theme.colors.warning} />
+                  <Text style={styles.importantDayBadgeText}>{item.type}</Text>
+                </View>
+                <Text
+                  testID={`selected-important-day-${item.id}`}
+                  style={styles.importantDayText}
+                >
+                  {item.name} ・ {formatImportantDayCountdown(item.date, item.isRecurringAnnual)}
+                </Text>
+              </View>
+            ))}
+          </View>
+        ) : null}
+
         {selectedReviews.length === 0 ? (
           <View style={styles.emptyCard}>
-            <Text style={styles.emptyTitle}>この日の記録はありません</Text>
+            <Text style={styles.emptyTitle}>この日の記録はまだありません</Text>
             <Text style={styles.emptyText}>
-              テンプレートを選んで、その日のことを短く残せます。
+              テンプレートを選んで、その日のことを残せます。
             </Text>
           </View>
         ) : (
@@ -253,7 +303,7 @@ export default function CalendarScreen() {
             return (
               <View key={item.id} style={styles.reviewCard}>
                 <View style={styles.reviewHeader}>
-                  <View style={{ flex: 1 }}>
+                  <View style={styles.reviewHeaderText}>
                     <Text style={styles.reviewTitle}>{item.templateName}</Text>
                     <Text style={styles.reviewDate}>
                       {new Date(item.createdAt).toLocaleTimeString('ja-JP', {
@@ -278,12 +328,10 @@ export default function CalendarScreen() {
 
                 <View style={styles.badgesRow}>
                   <Badge label={item.category} tone="primary" />
-                  {mood ? (
-                    <Badge label={`${mood.emoji} ${mood.label}`} tone="muted" />
-                  ) : null}
+                  {mood ? <Badge label={`${mood.emoji} ${mood.label}`} tone="muted" /> : null}
                 </View>
 
-                {stateTags ? <Text style={styles.stateSummary}>状態: {stateTags}</Text> : null}
+                {stateTags ? <Text style={styles.stateSummary}>状態タグ: {stateTags}</Text> : null}
 
                 <View style={styles.answerBox}>
                   {Object.entries(item.answers ?? {})
@@ -302,7 +350,7 @@ export default function CalendarScreen() {
                     <Text style={styles.editButtonText}>編集</Text>
                   </Pressable>
                   <Pressable
-                    style={[styles.deleteButton, isDeleting && { opacity: 0.6 }]}
+                    style={[styles.deleteButton, isDeleting && styles.buttonDisabled]}
                     onPress={() =>
                       Alert.alert(
                         'この記録を削除しますか？',
@@ -336,19 +384,17 @@ export default function CalendarScreen() {
 }
 
 function Badge({ label, tone }: { label: string; tone: 'primary' | 'muted' }) {
+  const { theme } = useAppTheme();
+  const styles = useMemo(() => createCalendarStyles(theme), [theme]);
+
   return (
-    <View
-      style={[
-        styles.badge,
-        tone === 'primary' ? styles.badgePrimary : styles.badgeMuted,
-      ]}
-    >
+    <View style={[styles.badge, tone === 'primary' ? styles.badgePrimary : styles.badgeMuted]}>
       <Text style={styles.badgeText}>{label}</Text>
     </View>
   );
 }
 
-function buildCalendarCells(baseMonth: Date): CalendarCell[] {
+export function buildCalendarCells(baseMonth: Date): CalendarCell[] {
   const firstDayOfMonth = new Date(baseMonth.getFullYear(), baseMonth.getMonth(), 1);
   const startDay = firstDayOfMonth.getDay();
   const calendarStartDate = new Date(firstDayOfMonth);
@@ -366,11 +412,12 @@ function buildCalendarCells(baseMonth: Date): CalendarCell[] {
   });
 }
 
-function getHeatStyle(count: number) {
-  if (count >= 4) return styles.heat4;
-  if (count >= 3) return styles.heat3;
-  if (count >= 2) return styles.heat2;
-  if (count >= 1) return styles.heat1;
+export function getHeatStyle(count: number, themeName: keyof typeof themeHeatPalettes) {
+  const palette = themeHeatPalettes[themeName] ?? themeHeatPalettes.light;
+  if (count >= 4) return { backgroundColor: palette[3] };
+  if (count >= 3) return { backgroundColor: palette[2] };
+  if (count >= 2) return { backgroundColor: palette[1] };
+  if (count >= 1) return { backgroundColor: palette[0] };
   return null;
 }
 
@@ -386,280 +433,345 @@ function formatDateLabel(dateKey: string) {
   return `${year}年${Number(month)}月${Number(day)}日`;
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flexGrow: 1,
-    backgroundColor: theme.colors.background,
-    padding: theme.spacing.xl,
-    paddingBottom: 120,
-  },
-  title: {
-    ...theme.typography.title,
-    color: theme.colors.text,
-    marginTop: theme.spacing.md,
-    marginBottom: theme.spacing.sm,
-  },
-  subtitle: {
-    ...theme.typography.body,
-    color: theme.colors.textMuted,
-    marginBottom: theme.spacing.xl,
-  },
-  monthCard: {
-    ...cardShadow,
-    backgroundColor: theme.colors.surface,
-    borderRadius: theme.radius.xl,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    padding: theme.spacing.lg,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: theme.spacing.md,
-  },
-  monthButton: {
-    width: 40,
-    height: 40,
-    borderRadius: theme.radius.pill,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: theme.colors.primarySoft,
-  },
-  monthHeaderText: {
-    alignItems: 'center',
-  },
-  monthLabel: {
-    ...theme.typography.section,
-    color: theme.colors.text,
-    marginBottom: 4,
-  },
-  monthCaption: {
-    ...theme.typography.caption,
-    color: theme.colors.textSoft,
-  },
-  calendarCard: {
-    ...cardShadow,
-    backgroundColor: theme.colors.surface,
-    borderRadius: theme.radius.xl,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    padding: theme.spacing.lg,
-    marginBottom: theme.spacing.xl,
-  },
-  weekRow: {
-    flexDirection: 'row',
-    marginBottom: theme.spacing.sm,
-  },
-  weekCell: {
-    width: '14.2857%',
-    alignItems: 'center',
-  },
-  weekLabel: {
-    ...theme.typography.caption,
-    color: theme.colors.textSoft,
-  },
-  grid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-  },
-  dayCell: {
-    width: '14.2857%',
-    aspectRatio: 1,
-    borderRadius: theme.radius.md,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 6,
-  },
-  dayCellSelected: {
-    backgroundColor: theme.colors.primary,
-  },
-  favoriteDayCell: {
-    borderWidth: 2,
-    borderColor: theme.colors.danger,
-  },
-  favoriteDayIcon: {
-    position: 'absolute',
-    top: 6,
-    right: 6,
-  },
-  dayCellOutside: {
-    opacity: 0.35,
-  },
-  heat1: { backgroundColor: '#f4ede5' },
-  heat2: { backgroundColor: '#eadbcc' },
-  heat3: { backgroundColor: '#d7c0ab' },
-  heat4: { backgroundColor: '#be9d82' },
-  dayText: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: theme.colors.text,
-  },
-  dayTextSelected: {
-    color: theme.colors.white,
-  },
-  dayTextOutside: {
-    color: theme.colors.textSoft,
-  },
-  dayTextToday: {
-    textDecorationLine: 'underline',
-  },
-  dayCount: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: theme.colors.primaryDark,
-    marginTop: 2,
-  },
-  dayCountSelected: {
-    color: theme.colors.white,
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-end',
-    gap: theme.spacing.md,
-    marginBottom: theme.spacing.md,
-  },
-  sectionLabel: {
-    ...theme.typography.caption,
-    color: theme.colors.textSoft,
-    marginBottom: 4,
-    textTransform: 'uppercase',
-  },
-  sectionTitle: {
-    ...theme.typography.section,
-    color: theme.colors.text,
-  },
-  createButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: theme.colors.primary,
-    borderRadius: theme.radius.pill,
-    paddingHorizontal: theme.spacing.lg,
-    paddingVertical: 10,
-  },
-  createButtonText: {
-    ...theme.typography.caption,
-    color: theme.colors.white,
-  },
-  emptyCard: {
-    ...cardShadow,
-    backgroundColor: theme.colors.surface,
-    borderRadius: theme.radius.xl,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    padding: theme.spacing.xxl,
-  },
-  emptyTitle: {
-    ...theme.typography.section,
-    color: theme.colors.text,
-    marginBottom: theme.spacing.sm,
-  },
-  emptyText: {
-    ...theme.typography.body,
-    color: theme.colors.textMuted,
-  },
-  reviewCard: {
-    ...cardShadow,
-    backgroundColor: theme.colors.surface,
-    borderRadius: theme.radius.xl,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    padding: theme.spacing.xl,
-    marginBottom: theme.spacing.md,
-  },
-  reviewHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: theme.spacing.md,
-    gap: theme.spacing.md,
-  },
-  reviewTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: theme.colors.text,
-    marginBottom: 4,
-  },
-  reviewDate: {
-    ...theme.typography.caption,
-    color: theme.colors.textSoft,
-  },
-  favoriteButton: {
-    width: 38,
-    height: 38,
-    borderRadius: theme.radius.pill,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: theme.colors.dangerSoft,
-  },
-  badgesRow: {
-    flexDirection: 'row',
-    gap: theme.spacing.sm,
-    marginBottom: theme.spacing.md,
-  },
-  badge: {
-    borderRadius: theme.radius.pill,
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: 6,
-  },
-  badgePrimary: {
-    backgroundColor: theme.colors.primarySoft,
-  },
-  badgeMuted: {
-    backgroundColor: theme.colors.surfaceMuted,
-  },
-  badgeText: {
-    ...theme.typography.caption,
-    color: theme.colors.textMuted,
-  },
-  stateSummary: {
-    ...theme.typography.caption,
-    color: theme.colors.textMuted,
-    marginBottom: theme.spacing.md,
-  },
-  answerBox: {
-    backgroundColor: theme.colors.surfaceMuted,
-    borderRadius: theme.radius.lg,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    padding: theme.spacing.md,
-  },
-  answerBlock: {
-    marginBottom: theme.spacing.sm,
-  },
-  answerKey: {
-    ...theme.typography.caption,
-    color: theme.colors.textSoft,
-    marginBottom: 4,
-  },
-  answerValue: {
-    ...theme.typography.body,
-    color: theme.colors.text,
-  },
-  actionRow: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    gap: theme.spacing.sm,
-    marginTop: theme.spacing.lg,
-  },
-  editButton: {
-    backgroundColor: theme.colors.primarySoft,
-    borderRadius: theme.radius.md,
-    paddingHorizontal: theme.spacing.lg,
-    paddingVertical: 10,
-  },
-  editButtonText: {
-    ...theme.typography.caption,
-    color: theme.colors.primaryDark,
-  },
-  deleteButton: {
-    backgroundColor: theme.colors.dangerSoft,
-    borderRadius: theme.radius.md,
-    paddingHorizontal: theme.spacing.lg,
-    paddingVertical: 10,
-  },
-  deleteButtonText: {
-    ...theme.typography.caption,
-    color: theme.colors.danger,
-  },
-});
+const themeHeatPalettes = {
+  light: ['#f4ede5', '#eadbcc', '#d7c0ab', '#be9d82'],
+  warm: ['#fde8dc', '#f7d2bc', '#eab291', '#d48c64'],
+  rose: ['#fde7ed', '#f7cad7', '#eb9db4', '#cf7390'],
+  amber: ['#fae9c6', '#f5d796', '#e6b85d', '#c58a2b'],
+  green: ['#e3efe1', '#cfe2cb', '#9fc09f', '#6e9a73'],
+  mint: ['#dff0eb', '#c0e5db', '#88c6b3', '#4e9c88'],
+  blue: ['#e2ebf8', '#c7d8f1', '#90b0de', '#5b82bf'],
+  navy: ['#2c3550', '#39456a', '#51608f', '#7087c4'],
+};
+
+export function createCalendarStyles(theme = getTheme('light')) {
+  return StyleSheet.create({
+    container: {
+      flexGrow: 1,
+      backgroundColor: theme.colors.background,
+      padding: theme.spacing.xl,
+      paddingBottom: 120,
+    },
+    title: {
+      ...theme.typography.title,
+      color: theme.colors.text,
+      marginTop: theme.spacing.md,
+      marginBottom: theme.spacing.sm,
+    },
+    subtitle: {
+      ...theme.typography.body,
+      color: theme.colors.textMuted,
+      marginBottom: theme.spacing.xl,
+    },
+    monthCard: {
+      ...createCardShadow(theme),
+      backgroundColor: theme.colors.surface,
+      borderRadius: theme.radius.xl,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      padding: theme.spacing.lg,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginBottom: theme.spacing.md,
+    },
+    monthButton: {
+      width: 40,
+      height: 40,
+      borderRadius: theme.radius.pill,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: theme.colors.primarySoft,
+    },
+    monthHeaderText: {
+      alignItems: 'center',
+      flexShrink: 1,
+      paddingHorizontal: theme.spacing.sm,
+    },
+    monthLabel: {
+      ...theme.typography.section,
+      color: theme.colors.text,
+      marginBottom: 4,
+    },
+    monthCaption: {
+      ...theme.typography.caption,
+      color: theme.colors.textSoft,
+    },
+    calendarCard: {
+      ...createCardShadow(theme),
+      backgroundColor: theme.colors.surface,
+      borderRadius: theme.radius.xl,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      padding: theme.spacing.lg,
+      marginBottom: theme.spacing.lg,
+    },
+    weekRow: {
+      flexDirection: 'row',
+      marginBottom: theme.spacing.sm,
+    },
+    weekCell: {
+      width: '14.2857%',
+      alignItems: 'center',
+    },
+    weekLabel: {
+      ...theme.typography.caption,
+      color: theme.colors.textSoft,
+    },
+    grid: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+    },
+    dayCell: {
+      width: '14.2857%',
+      aspectRatio: 1,
+      borderRadius: theme.radius.md,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginBottom: 6,
+      position: 'relative',
+    },
+    dayCellSelected: {
+      backgroundColor: theme.colors.primary,
+    },
+    favoriteDayCell: {
+      borderWidth: 2,
+      borderColor: theme.colors.danger,
+    },
+    importantDayDot: {
+      position: 'absolute',
+      top: 6,
+      left: 6,
+      width: 8,
+      height: 8,
+      borderRadius: theme.radius.pill,
+      backgroundColor: theme.colors.warning,
+    },
+    importantDayDotSelected: {
+      backgroundColor: theme.colors.white,
+    },
+    favoriteDayIcon: {
+      position: 'absolute',
+      top: 6,
+      right: 6,
+    },
+    dayCellOutside: {
+      opacity: 0.35,
+    },
+    dayText: {
+      fontSize: 15,
+      fontWeight: '600',
+      color: theme.colors.text,
+    },
+    dayTextSelected: {
+      color: theme.colors.white,
+    },
+    dayTextOutside: {
+      color: theme.colors.textSoft,
+    },
+    dayTextToday: {
+      textDecorationLine: 'underline',
+    },
+    dayCount: {
+      fontSize: 10,
+      fontWeight: '700',
+      color: theme.colors.primaryDark,
+      marginTop: 2,
+    },
+    dayCountSelected: {
+      color: theme.colors.white,
+    },
+    sectionHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'flex-end',
+      gap: theme.spacing.md,
+      marginBottom: theme.spacing.md,
+    },
+    sectionLabel: {
+      ...theme.typography.caption,
+      color: theme.colors.textSoft,
+      marginBottom: 4,
+    },
+    sectionTitle: {
+      ...theme.typography.section,
+      color: theme.colors.text,
+    },
+    createButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      backgroundColor: theme.colors.primary,
+      borderRadius: theme.radius.pill,
+      paddingHorizontal: theme.spacing.lg,
+      paddingVertical: 10,
+    },
+    createButtonText: {
+      ...theme.typography.caption,
+      color: theme.colors.white,
+    },
+    importantDaysCard: {
+      ...createCardShadow(theme),
+      backgroundColor: theme.colors.surface,
+      borderRadius: theme.radius.xl,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      padding: theme.spacing.xl,
+      marginBottom: theme.spacing.md,
+    },
+    importantDaysTitle: {
+      ...theme.typography.section,
+      color: theme.colors.text,
+      marginBottom: theme.spacing.sm,
+    },
+    importantDayRow: {
+      marginTop: theme.spacing.sm,
+    },
+    importantDayBadge: {
+      alignSelf: 'flex-start',
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      backgroundColor: theme.colors.surfaceMuted,
+      borderRadius: theme.radius.pill,
+      paddingHorizontal: theme.spacing.md,
+      paddingVertical: 6,
+      marginBottom: 6,
+    },
+    importantDayBadgeText: {
+      ...theme.typography.caption,
+      color: theme.colors.textMuted,
+    },
+    importantDayText: {
+      ...theme.typography.body,
+      color: theme.colors.text,
+    },
+    emptyCard: {
+      ...createCardShadow(theme),
+      backgroundColor: theme.colors.surface,
+      borderRadius: theme.radius.xl,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      padding: theme.spacing.xxl,
+    },
+    emptyTitle: {
+      ...theme.typography.section,
+      color: theme.colors.text,
+      marginBottom: theme.spacing.sm,
+    },
+    emptyText: {
+      ...theme.typography.body,
+      color: theme.colors.textMuted,
+    },
+    reviewCard: {
+      ...createCardShadow(theme),
+      backgroundColor: theme.colors.surface,
+      borderRadius: theme.radius.xl,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      padding: theme.spacing.xl,
+      marginBottom: theme.spacing.md,
+    },
+    reviewHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'flex-start',
+      marginBottom: theme.spacing.md,
+      gap: theme.spacing.md,
+    },
+    reviewHeaderText: {
+      flex: 1,
+    },
+    reviewTitle: {
+      fontSize: 18,
+      fontWeight: '700',
+      color: theme.colors.text,
+      marginBottom: 4,
+    },
+    reviewDate: {
+      ...theme.typography.caption,
+      color: theme.colors.textSoft,
+    },
+    favoriteButton: {
+      width: 38,
+      height: 38,
+      borderRadius: theme.radius.pill,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: theme.colors.dangerSoft,
+    },
+    badgesRow: {
+      flexDirection: 'row',
+      gap: theme.spacing.sm,
+      marginBottom: theme.spacing.md,
+    },
+    badge: {
+      borderRadius: theme.radius.pill,
+      paddingHorizontal: theme.spacing.md,
+      paddingVertical: 6,
+    },
+    badgePrimary: {
+      backgroundColor: theme.colors.primarySoft,
+    },
+    badgeMuted: {
+      backgroundColor: theme.colors.surfaceMuted,
+    },
+    badgeText: {
+      ...theme.typography.caption,
+      color: theme.colors.textMuted,
+    },
+    stateSummary: {
+      ...theme.typography.caption,
+      color: theme.colors.textMuted,
+      marginBottom: theme.spacing.md,
+    },
+    answerBox: {
+      backgroundColor: theme.colors.surfaceMuted,
+      borderRadius: theme.radius.lg,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      padding: theme.spacing.md,
+    },
+    answerBlock: {
+      marginBottom: theme.spacing.sm,
+    },
+    answerKey: {
+      ...theme.typography.caption,
+      color: theme.colors.textSoft,
+      marginBottom: 4,
+    },
+    answerValue: {
+      ...theme.typography.body,
+      color: theme.colors.text,
+    },
+    actionRow: {
+      flexDirection: 'row',
+      justifyContent: 'flex-end',
+      gap: theme.spacing.sm,
+      marginTop: theme.spacing.lg,
+    },
+    editButton: {
+      backgroundColor: theme.colors.primarySoft,
+      borderRadius: theme.radius.md,
+      paddingHorizontal: theme.spacing.lg,
+      paddingVertical: 10,
+    },
+    editButtonText: {
+      ...theme.typography.caption,
+      color: theme.colors.primaryDark,
+    },
+    deleteButton: {
+      backgroundColor: theme.colors.dangerSoft,
+      borderRadius: theme.radius.md,
+      paddingHorizontal: theme.spacing.lg,
+      paddingVertical: 10,
+    },
+    buttonDisabled: {
+      opacity: 0.6,
+    },
+    deleteButtonText: {
+      ...theme.typography.caption,
+      color: theme.colors.danger,
+    },
+  });
+}
