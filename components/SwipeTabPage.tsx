@@ -25,7 +25,7 @@ type Props = {
   children: ReactNode;
 };
 
-const TAB_ORDER: TabKey[] = ['index', 'history', 'analytics'];
+const TAB_ORDER: TabKey[] = ['index', 'history', 'calendar', 'analytics'];
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 

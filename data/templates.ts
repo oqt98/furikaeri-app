@@ -6,10 +6,10 @@ export type TemplateField = {
 
 export type TemplateMode =
   | 'さっと記録'
-  | '前向きに見る'
-  | '学びを整理する'
+  | '気持ちを整える'
+  | '学びを振り返る'
   | '次につなげる'
-  | '視点を切り替える';
+  | '視点を広げる';
 
 export type ReviewTemplate = {
   id: string;
@@ -22,18 +22,15 @@ export type ReviewTemplate = {
 export const templates: ReviewTemplate[] = [
   {
     id: 'diary',
-    name: 'ひとことメモ',
-    description: '今日の出来事を、短く気軽に残したいときに向いています。',
+    name: '今日のタイトル',
+    description: 'まずは1日の印象をひとことタイトルで残したいときに向いています。',
     mode: 'さっと記録',
-    fields: [
-      { key: 'title', label: '今日のひとこと', multiline: true },
-      { key: 'memo', label: '本文', multiline: true },
-    ],
+    fields: [{ key: 'title', label: '今日のタイトル', multiline: true }],
   },
   {
     id: 'kpt',
     name: 'KPT',
-    description: '続けたいこと、困ったこと、次に試すことを整理します。',
+    description: '続けたいこと、困ったこと、次に試したいことを整理できます。',
     mode: '次につなげる',
     fields: [
       { key: 'keep', label: 'Keep', multiline: true },
@@ -44,8 +41,8 @@ export const templates: ReviewTemplate[] = [
   {
     id: 'ywt',
     name: 'YWT',
-    description: 'やったこと、わかったこと、次にやることを見直せます。',
-    mode: '学びを整理する',
+    description: 'やったこと、わかったこと、次にやることを短く整理できます。',
+    mode: '学びを振り返る',
     fields: [
       { key: 'yatta', label: 'やったこと', multiline: true },
       { key: 'wakatta', label: 'わかったこと', multiline: true },
@@ -55,8 +52,8 @@ export const templates: ReviewTemplate[] = [
   {
     id: 'good3',
     name: 'よかったこと3つ',
-    description: '前向きに1日を締めたいときの、やさしいテンプレートです。',
-    mode: '前向きに見る',
+    description: 'よかったことを3つ並べて、前向きに振り返りたい日に向いています。',
+    mode: '気持ちを整える',
     fields: [
       { key: 'good1', label: 'よかったこと 1', multiline: true },
       { key: 'good2', label: 'よかったこと 2', multiline: true },
@@ -66,7 +63,7 @@ export const templates: ReviewTemplate[] = [
   {
     id: 'ssc',
     name: 'Start / Stop / Continue',
-    description: '始める、やめる、続けるの3つで次の行動に落とし込みます。',
+    description: '始めること、やめること、続けることを整理して次に活かせます。',
     mode: '次につなげる',
     fields: [
       { key: 'start', label: 'Start', multiline: true },
@@ -77,8 +74,8 @@ export const templates: ReviewTemplate[] = [
   {
     id: '4ls',
     name: '4Ls',
-    description: 'Liked / Learned / Lacked / Longed for で広く振り返ります。',
-    mode: '学びを整理する',
+    description: 'Liked / Learned / Lacked / Longed for の4視点で振り返れます。',
+    mode: '視点を広げる',
     fields: [
       { key: 'liked', label: 'Liked', multiline: true },
       { key: 'learned', label: 'Learned', multiline: true },
@@ -89,8 +86,8 @@ export const templates: ReviewTemplate[] = [
   {
     id: 'rose-thorn-bud',
     name: 'Rose / Thorn / Bud',
-    description: 'よかったこと、つらかったこと、芽が出そうなことを見ます。',
-    mode: '視点を切り替える',
+    description: 'よかったこと、つらかったこと、芽が出そうなことを分けて見られます。',
+    mode: '視点を広げる',
     fields: [
       { key: 'rose', label: 'Rose', multiline: true },
       { key: 'thorn', label: 'Thorn', multiline: true },
@@ -100,19 +97,19 @@ export const templates: ReviewTemplate[] = [
   {
     id: 'sailboat',
     name: 'Sailboat',
-    description: '進みを助けたことと、止めていたことを整理します。',
-    mode: '視点を切り替える',
+    description: '進めたことと足を引っぱったことを整理したい日に向いています。',
+    mode: '視点を広げる',
     fields: [
       { key: 'wind', label: '追い風', multiline: true },
-      { key: 'anchor', label: '足を止めたもの', multiline: true },
+      { key: 'anchor', label: '足かせ', multiline: true },
       { key: 'island', label: '目指したい場所', multiline: true },
-      { key: 'risk', label: '気になっていること', multiline: true },
+      { key: 'risk', label: '気になるリスク', multiline: true },
     ],
   },
   {
     id: 'starfish',
     name: 'Starfish',
-    description: 'もっとやる、減らす、続ける、やめる、始めるで整えます。',
+    description: 'もっとやる、減らす、続ける、やめる、始めるを整理できます。',
     mode: '次につなげる',
     fields: [
       { key: 'more', label: 'もっとやること', multiline: true },
@@ -125,8 +122,8 @@ export const templates: ReviewTemplate[] = [
   {
     id: 'glad-sad-mad',
     name: 'Glad / Sad / Mad',
-    description: '感情の動きを3つの切り口で見つめたい日に向いています。',
-    mode: '前向きに見る',
+    description: '感情の動きを3つの切り口で振り返れます。',
+    mode: '気持ちを整える',
     fields: [
       { key: 'glad', label: 'Glad', multiline: true },
       { key: 'sad', label: 'Sad', multiline: true },

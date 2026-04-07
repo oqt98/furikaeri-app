@@ -42,18 +42,10 @@ export default function SideMenu({ visible, onClose }: Props) {
               }}
             >
               <View style={styles.menuItemLeft}>
-                <Ionicons
-                  name={item.icon}
-                  size={18}
-                  color={theme.colors.primaryDark}
-                />
+                <Ionicons name={item.icon} size={18} color={theme.colors.primaryDark} />
                 <Text style={styles.menuLabel}>{item.label}</Text>
               </View>
-              <Ionicons
-                name="chevron-forward"
-                size={18}
-                color={theme.colors.textSoft}
-              />
+              <Ionicons name="chevron-forward" size={18} color={theme.colors.textSoft} />
             </Pressable>
           ))}
         </Pressable>
@@ -63,9 +55,26 @@ export default function SideMenu({ visible, onClose }: Props) {
 }
 
 function themeLabel(themeName: ThemeName) {
-  if (themeName === 'dark') return 'ダーク';
-  if (themeName === 'warm') return 'やさしい';
-  return 'ライト';
+  switch (themeName) {
+    case 'light':
+      return 'ライト';
+    case 'warm':
+      return 'ウォーム';
+    case 'rose':
+      return 'ローズ';
+    case 'amber':
+      return 'アンバー';
+    case 'green':
+      return 'グリーン';
+    case 'mint':
+      return 'ミント';
+    case 'blue':
+      return 'ブルー';
+    case 'navy':
+      return 'ネイビー';
+    default:
+      return 'ライト';
+  }
 }
 
 function createStyles(theme: ReturnType<typeof useAppTheme>['theme']) {

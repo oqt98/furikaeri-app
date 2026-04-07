@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useRouter } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import {
   Alert,
   Pressable,
@@ -11,16 +11,12 @@ import {
   View,
 } from 'react-native';
 import type { TagDefinition, TagType } from '../../data/tags';
-import {
-  createTag,
-  getTagCatalog,
-  setTagArchived,
-} from '../../lib/storage';
-import { cardShadow, theme } from '../../lib/theme';
+import { createTag, getTagCatalog, setTagArchived } from '../../lib/storage';
+import { useAppTheme } from '../../lib/theme-context';
+import { createCardShadow } from '../../lib/theme';
 
 type SectionProps = {
   title: string;
-  type: TagType;
   tags: TagDefinition[];
   archivedTags: TagDefinition[];
   value: string;
@@ -31,6 +27,8 @@ type SectionProps = {
 
 export default function TagsScreen() {
   const router = useRouter();
+  const { theme } = useAppTheme();
+  const styles = useMemo(() => createStyles(theme), [theme]);
   const [actionValue, setActionValue] = useState('');
   const [stateValue, setStateValue] = useState('');
   const [actionTags, setActionTags] = useState<TagDefinition[]>([]);
@@ -43,7 +41,11 @@ export default function TagsScreen() {
     });
   }, []);
 
-  useFocusEffect(load);
+  useFocusEffect(
+    useCallback(() => {
+      load();
+    }, [load])
+  );
 
   const handleCreate = async (type: TagType, value: string) => {
     const created = await createTag(type, value);
@@ -75,14 +77,13 @@ export default function TagsScreen() {
         <View style={styles.headerText}>
           <Text style={styles.title}>タグ管理</Text>
           <Text style={styles.subtitle}>
-            使わないタグは一覧から外せます。既存の記録は残ります。
+            行動タグと状態タグを整理できます。記録に戻っても入力途中の内容はそのまま残ります。
           </Text>
         </View>
       </View>
 
       <TagSection
         title="行動タグ"
-        type="action"
         tags={actionTags.filter((tag) => !tag.isArchived)}
         archivedTags={actionTags.filter((tag) => tag.isArchived)}
         value={actionValue}
@@ -97,7 +98,6 @@ export default function TagsScreen() {
 
       <TagSection
         title="状態タグ"
-        type="state"
         tags={stateTags.filter((tag) => !tag.isArchived)}
         archivedTags={stateTags.filter((tag) => tag.isArchived)}
         value={stateValue}
@@ -122,6 +122,9 @@ function TagSection({
   onCreate,
   onToggleArchive,
 }: SectionProps) {
+  const { theme } = useAppTheme();
+  const styles = useMemo(() => createStyles(theme), [theme]);
+
   return (
     <View style={styles.card}>
       <Text style={styles.sectionTitle}>{title}</Text>
@@ -138,16 +141,20 @@ function TagSection({
         </Pressable>
       </View>
 
-      <Text style={styles.groupLabel}>表示中</Text>
+      <Text style={styles.groupLabel}>使用中</Text>
       <View style={styles.tagList}>
-        {tags.map((tag) => (
-          <View key={tag.id} style={styles.tagRow}>
-            <Text style={styles.tagText}>{tag.label}</Text>
-            <Pressable onPress={() => onToggleArchive(tag.id, true)}>
-              <Text style={styles.archiveText}>一覧から外す</Text>
-            </Pressable>
-          </View>
-        ))}
+        {tags.length === 0 ? (
+          <Text style={styles.emptyText}>まだタグはありません。</Text>
+        ) : (
+          tags.map((tag) => (
+            <View key={tag.id} style={styles.tagRow}>
+              <Text style={styles.tagText}>{tag.label}</Text>
+              <Pressable onPress={() => onToggleArchive(tag.id, true)}>
+                <Text style={styles.archiveText}>非表示にする</Text>
+              </Pressable>
+            </View>
+          ))
+        )}
       </View>
 
       {archivedTags.length > 0 ? (
@@ -169,106 +176,114 @@ function TagSection({
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flexGrow: 1,
-    backgroundColor: theme.colors.background,
-    padding: theme.spacing.xl,
-    paddingBottom: 120,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: theme.spacing.md,
-    marginTop: theme.spacing.md,
-    marginBottom: theme.spacing.lg,
-  },
-  backButton: {
-    width: 40,
-    height: 40,
-    borderRadius: theme.radius.pill,
-    backgroundColor: theme.colors.primarySoft,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  headerText: {
-    flex: 1,
-  },
-  title: {
-    ...theme.typography.title,
-    color: theme.colors.text,
-    marginBottom: theme.spacing.sm,
-  },
-  subtitle: {
-    ...theme.typography.body,
-    color: theme.colors.textMuted,
-  },
-  card: {
-    ...cardShadow,
-    backgroundColor: theme.colors.surface,
-    borderRadius: theme.radius.xl,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    padding: theme.spacing.xl,
-    marginBottom: theme.spacing.md,
-  },
-  sectionTitle: {
-    ...theme.typography.section,
-    color: theme.colors.text,
-    marginBottom: theme.spacing.md,
-  },
-  addRow: {
-    flexDirection: 'row',
-    gap: theme.spacing.sm,
-    marginBottom: theme.spacing.lg,
-  },
-  input: {
-    flex: 1,
-    backgroundColor: theme.colors.surfaceMuted,
-    borderRadius: theme.radius.lg,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    paddingHorizontal: theme.spacing.lg,
-    paddingVertical: 12,
-    color: theme.colors.text,
-  },
-  addButton: {
-    backgroundColor: theme.colors.primary,
-    borderRadius: theme.radius.lg,
-    paddingHorizontal: theme.spacing.lg,
-    justifyContent: 'center',
-  },
-  addButtonText: {
-    ...theme.typography.caption,
-    color: theme.colors.white,
-  },
-  groupLabel: {
-    ...theme.typography.caption,
-    color: theme.colors.textSoft,
-    marginBottom: theme.spacing.sm,
-  },
-  tagList: {
-    gap: theme.spacing.sm,
-  },
-  tagRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    backgroundColor: theme.colors.surfaceMuted,
-    borderRadius: theme.radius.lg,
-    paddingHorizontal: theme.spacing.lg,
-    paddingVertical: 12,
-  },
-  tagText: {
-    ...theme.typography.body,
-    color: theme.colors.text,
-  },
-  archiveText: {
-    ...theme.typography.caption,
-    color: theme.colors.danger,
-  },
-  restoreText: {
-    ...theme.typography.caption,
-    color: theme.colors.primaryDark,
-  },
-});
+function createStyles(theme: ReturnType<typeof useAppTheme>['theme']) {
+  return StyleSheet.create({
+    container: {
+      flexGrow: 1,
+      backgroundColor: theme.colors.background,
+      padding: theme.spacing.xl,
+      paddingBottom: 120,
+    },
+    header: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      gap: theme.spacing.md,
+      marginTop: theme.spacing.md,
+      marginBottom: theme.spacing.lg,
+    },
+    backButton: {
+      width: 40,
+      height: 40,
+      borderRadius: theme.radius.pill,
+      backgroundColor: theme.colors.primarySoft,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    headerText: {
+      flex: 1,
+    },
+    title: {
+      ...theme.typography.title,
+      color: theme.colors.text,
+      marginBottom: theme.spacing.sm,
+    },
+    subtitle: {
+      ...theme.typography.body,
+      color: theme.colors.textMuted,
+    },
+    card: {
+      ...createCardShadow(theme),
+      backgroundColor: theme.colors.surface,
+      borderRadius: theme.radius.xl,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      padding: theme.spacing.xl,
+      marginBottom: theme.spacing.md,
+    },
+    sectionTitle: {
+      ...theme.typography.section,
+      color: theme.colors.text,
+      marginBottom: theme.spacing.md,
+    },
+    addRow: {
+      flexDirection: 'row',
+      gap: theme.spacing.sm,
+      marginBottom: theme.spacing.lg,
+    },
+    input: {
+      flex: 1,
+      backgroundColor: theme.colors.surfaceMuted,
+      borderRadius: theme.radius.lg,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      paddingHorizontal: theme.spacing.lg,
+      paddingVertical: 12,
+      color: theme.colors.text,
+    },
+    addButton: {
+      backgroundColor: theme.colors.primary,
+      borderRadius: theme.radius.lg,
+      paddingHorizontal: theme.spacing.lg,
+      justifyContent: 'center',
+    },
+    addButtonText: {
+      ...theme.typography.caption,
+      color: theme.colors.white,
+    },
+    groupLabel: {
+      ...theme.typography.caption,
+      color: theme.colors.textSoft,
+      marginBottom: theme.spacing.sm,
+    },
+    tagList: {
+      gap: theme.spacing.sm,
+    },
+    emptyText: {
+      ...theme.typography.body,
+      color: theme.colors.textMuted,
+    },
+    tagRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      backgroundColor: theme.colors.surfaceMuted,
+      borderRadius: theme.radius.lg,
+      paddingHorizontal: theme.spacing.lg,
+      paddingVertical: 12,
+    },
+    tagText: {
+      ...theme.typography.body,
+      color: theme.colors.text,
+      flex: 1,
+      paddingRight: theme.spacing.md,
+    },
+    archiveText: {
+      ...theme.typography.caption,
+      color: theme.colors.danger,
+    },
+    restoreText: {
+      ...theme.typography.caption,
+      color: theme.colors.primaryDark,
+    },
+  });
+}

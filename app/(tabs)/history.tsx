@@ -15,8 +15,10 @@ import SideMenu from '../../components/SideMenu';
 import SwipeTabPage from '../../components/SwipeTabPage';
 import {
   CATEGORY_FILTER_OPTIONS,
+  MOOD_OPTIONS,
   getMoodOption,
   type CategoryFilterOption,
+  type MoodValue,
 } from '../../data/reviewOptions';
 import {
   deleteReview,
@@ -28,6 +30,8 @@ import {
 import { useAppTheme } from '../../lib/theme-context';
 import { createCardShadow } from '../../lib/theme';
 
+type PeriodFilter = 'all' | 'thisWeek' | 'thisMonth' | 'month';
+
 export default function HistoryScreen() {
   const { theme } = useAppTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
@@ -35,13 +39,26 @@ export default function HistoryScreen() {
   const [searchText, setSearchText] = useState('');
   const [selectedCategory, setSelectedCategory] =
     useState<CategoryFilterOption>('すべて');
+  const [selectedMood, setSelectedMood] = useState<MoodValue | 'all'>('all');
+  const [selectedActionTagId, setSelectedActionTagId] = useState<string>('all');
+  const [selectedStateTagId, setSelectedStateTagId] = useState<string>('all');
   const [favoritesOnly, setFavoritesOnly] = useState(false);
+  const [periodFilter, setPeriodFilter] = useState<PeriodFilter>('all');
+  const [selectedMonth, setSelectedMonth] = useState(getCurrentMonthKey());
   const [tagLabelMap, setTagLabelMap] = useState<Map<string, string>>(new Map());
+  const [actionTags, setActionTags] = useState<{ id: string; label: string }[]>([]);
+  const [stateTags, setStateTags] = useState<{ id: string; label: string }[]>([]);
   const [isMenuVisible, setIsMenuVisible] = useState(false);
 
   const loadReviews = useCallback(async () => {
     const [nextReviews, catalog] = await Promise.all([getReviews(), getTagCatalog()]);
     setReviews(nextReviews);
+    setActionTags(
+      catalog.action.filter((tag) => !tag.isArchived).map((tag) => ({ id: tag.id, label: tag.label }))
+    );
+    setStateTags(
+      catalog.state.filter((tag) => !tag.isArchived).map((tag) => ({ id: tag.id, label: tag.label }))
+    );
     setTagLabelMap(
       new Map([...catalog.action, ...catalog.state].map((tag) => [tag.id, tag.label]))
     );
@@ -59,25 +76,51 @@ export default function HistoryScreen() {
     return reviews.filter((review) => {
       const categoryMatch =
         selectedCategory === 'すべて' || review.category === selectedCategory;
+      const moodMatch = selectedMood === 'all' || review.mood === selectedMood;
       const favoriteMatch = !favoritesOnly || review.isFavorite;
+      const actionTagMatch =
+        selectedActionTagId === 'all' || review.actionTagIds.includes(selectedActionTagId);
+      const stateTagMatch =
+        selectedStateTagId === 'all' || review.stateTagIds.includes(selectedStateTagId);
+      const periodMatch = matchesPeriodFilter(review.createdAt, periodFilter, selectedMonth);
 
       const tagLabels = [...review.actionTagIds, ...review.stateTagIds]
         .map((id) => tagLabelMap.get(id) ?? '')
         .join(' ');
       const body = Object.values(review.answers ?? {}).join(' ');
-      const searchPool = `${review.templateName} ${review.category} ${tagLabels} ${body}`.toLowerCase();
+      const searchPool =
+        `${review.templateName} ${review.category} ${tagLabels} ${body}`.toLowerCase();
       const keywordMatch = !keyword || searchPool.includes(keyword);
 
-      return categoryMatch && favoriteMatch && keywordMatch;
+      return (
+        categoryMatch &&
+        moodMatch &&
+        favoriteMatch &&
+        actionTagMatch &&
+        stateTagMatch &&
+        periodMatch &&
+        keywordMatch
+      );
     });
-  }, [favoritesOnly, reviews, searchText, selectedCategory, tagLabelMap]);
+  }, [
+    favoritesOnly,
+    periodFilter,
+    reviews,
+    searchText,
+    selectedActionTagId,
+    selectedCategory,
+    selectedMood,
+    selectedMonth,
+    selectedStateTagId,
+    tagLabelMap,
+  ]);
 
   return (
     <SwipeTabPage tabKey="history">
       <ScrollView contentContainerStyle={styles.container}>
         <AppHeader
           title="履歴"
-          subtitle="書いた記録を、あとから静かに見返せます。"
+          subtitle="一覧で振り返りながら、条件を絞って見返せます。"
           onOpenMenu={() => setIsMenuVisible(true)}
         />
 
@@ -88,32 +131,111 @@ export default function HistoryScreen() {
               style={styles.searchInput}
               value={searchText}
               onChangeText={setSearchText}
-              placeholder="キーワードで探す"
+              placeholder="キーワードで検索"
               placeholderTextColor={theme.colors.textSoft}
             />
           </View>
 
-          <View style={styles.filterRow}>
-            {CATEGORY_FILTER_OPTIONS.map((option) => {
-              const active = option === selectedCategory;
-              return (
-                <Pressable
+          <FilterSection title="期間" styles={styles}>
+            <View style={styles.filterRow}>
+              <FilterChip
+                label="すべて"
+                active={periodFilter === 'all'}
+                onPress={() => setPeriodFilter('all')}
+              />
+              <FilterChip
+                label="今週"
+                active={periodFilter === 'thisWeek'}
+                onPress={() => setPeriodFilter('thisWeek')}
+              />
+              <FilterChip
+                label="今月"
+                active={periodFilter === 'thisMonth'}
+                onPress={() => setPeriodFilter('thisMonth')}
+              />
+              <FilterChip
+                label="指定月"
+                active={periodFilter === 'month'}
+                onPress={() => setPeriodFilter('month')}
+              />
+            </View>
+            {periodFilter === 'month' ? (
+              <TextInput
+                style={styles.monthInput}
+                value={selectedMonth}
+                onChangeText={setSelectedMonth}
+                placeholder="2026-04"
+                placeholderTextColor={theme.colors.textSoft}
+              />
+            ) : null}
+          </FilterSection>
+
+          <FilterSection title="カテゴリ" styles={styles}>
+            <View style={styles.filterRow}>
+              {CATEGORY_FILTER_OPTIONS.map((option) => (
+                <FilterChip
                   key={option}
-                  style={[styles.filterChip, active && styles.filterChipActive]}
+                  label={option}
+                  active={option === selectedCategory}
                   onPress={() => setSelectedCategory(option)}
-                >
-                  <Text
-                    style={[
-                      styles.filterChipText,
-                      active && styles.filterChipTextActive,
-                    ]}
-                  >
-                    {option}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
+                />
+              ))}
+            </View>
+          </FilterSection>
+
+          <FilterSection title="気分" styles={styles}>
+            <View style={styles.filterRow}>
+              <FilterChip
+                label="すべて"
+                active={selectedMood === 'all'}
+                onPress={() => setSelectedMood('all')}
+              />
+              {MOOD_OPTIONS.map((option) => (
+                <FilterChip
+                  key={option.value}
+                  label={`${option.emoji} ${option.label}`}
+                  active={selectedMood === option.value}
+                  onPress={() => setSelectedMood(option.value)}
+                />
+              ))}
+            </View>
+          </FilterSection>
+
+          <FilterSection title="行動タグ" styles={styles}>
+            <View style={styles.filterRow}>
+              <FilterChip
+                label="すべて"
+                active={selectedActionTagId === 'all'}
+                onPress={() => setSelectedActionTagId('all')}
+              />
+              {actionTags.map((tag) => (
+                <FilterChip
+                  key={tag.id}
+                  label={tag.label}
+                  active={selectedActionTagId === tag.id}
+                  onPress={() => setSelectedActionTagId(tag.id)}
+                />
+              ))}
+            </View>
+          </FilterSection>
+
+          <FilterSection title="状態タグ" styles={styles}>
+            <View style={styles.filterRow}>
+              <FilterChip
+                label="すべて"
+                active={selectedStateTagId === 'all'}
+                onPress={() => setSelectedStateTagId('all')}
+              />
+              {stateTags.map((tag) => (
+                <FilterChip
+                  key={tag.id}
+                  label={tag.label}
+                  active={selectedStateTagId === tag.id}
+                  onPress={() => setSelectedStateTagId(tag.id)}
+                />
+              ))}
+            </View>
+          </FilterSection>
 
           <Pressable
             style={[styles.favoriteToggle, favoritesOnly && styles.favoriteToggleActive]}
@@ -173,7 +295,7 @@ function HistoryCard({
   const { theme } = useAppTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
   const mood = item.mood ? getMoodOption(item.mood) : null;
-  const preview = Object.values(item.answers ?? {}).find((value) => value.trim());
+  const preview = item.answers.memo?.trim() || Object.values(item.answers ?? {}).find((value) => value.trim());
   const tags = [...item.actionTagIds, ...item.stateTagIds]
     .map((id) => tagLabelMap.get(id))
     .filter(Boolean)
@@ -225,7 +347,7 @@ function HistoryCard({
       </View>
 
       <Text style={styles.previewText}>
-        {preview?.trim() || '本文はまだ入力されていません。'}
+        {preview?.trim() || 'まだ入力はありません。'}
       </Text>
 
       <View style={styles.cardActions}>
@@ -248,6 +370,47 @@ function HistoryCard({
   );
 }
 
+function FilterSection({
+  title,
+  children,
+  styles,
+}: {
+  title: string;
+  children: React.ReactNode;
+  styles: ReturnType<typeof createStyles>;
+}) {
+  return (
+    <View>
+      <Text style={styles.filterTitle}>{title}</Text>
+      {children}
+    </View>
+  );
+}
+
+function FilterChip({
+  label,
+  active,
+  onPress,
+}: {
+  label: string;
+  active: boolean;
+  onPress: () => void;
+}) {
+  const { theme } = useAppTheme();
+  const styles = useMemo(() => createStyles(theme), [theme]);
+
+  return (
+    <Pressable
+      style={[styles.filterChip, active && styles.filterChipActive]}
+      onPress={onPress}
+    >
+      <Text style={[styles.filterChipText, active && styles.filterChipTextActive]}>
+        {label}
+      </Text>
+    </Pressable>
+  );
+}
+
 function MetaChip({ label, muted }: { label: string; muted?: boolean }) {
   const { theme } = useAppTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
@@ -256,6 +419,47 @@ function MetaChip({ label, muted }: { label: string; muted?: boolean }) {
       <Text style={styles.metaChipText}>{label}</Text>
     </View>
   );
+}
+
+function matchesPeriodFilter(createdAt: string, period: PeriodFilter, selectedMonth: string) {
+  if (period === 'all') return true;
+
+  const date = new Date(createdAt);
+  const now = new Date();
+
+  if (period === 'thisMonth') {
+    return (
+      date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth()
+    );
+  }
+
+  if (period === 'thisWeek') {
+    const { start, end } = getWeekRange(now);
+    return date >= start && date <= end;
+  }
+
+  if (!/^\d{4}-\d{2}$/.test(selectedMonth)) return true;
+  const [year, month] = selectedMonth.split('-').map(Number);
+  return date.getFullYear() === year && date.getMonth() === month - 1;
+}
+
+function getWeekRange(baseDate: Date) {
+  const date = new Date(baseDate);
+  const day = date.getDay();
+  const diffToMonday = day === 0 ? -6 : 1 - day;
+  const start = new Date(date.getFullYear(), date.getMonth(), date.getDate() + diffToMonday);
+  start.setHours(0, 0, 0, 0);
+
+  const end = new Date(start);
+  end.setDate(start.getDate() + 6);
+  end.setHours(23, 59, 59, 999);
+
+  return { start, end };
+}
+
+function getCurrentMonthKey() {
+  const now = new Date();
+  return `${now.getFullYear()}-${`${now.getMonth() + 1}`.padStart(2, '0')}`;
 }
 
 function createStyles(theme: ReturnType<typeof useAppTheme>['theme']) {
@@ -292,6 +496,11 @@ function createStyles(theme: ReturnType<typeof useAppTheme>['theme']) {
       color: theme.colors.text,
       fontSize: 15,
     },
+    filterTitle: {
+      ...theme.typography.caption,
+      color: theme.colors.textSoft,
+      marginBottom: theme.spacing.sm,
+    },
     filterRow: {
       flexDirection: 'row',
       flexWrap: 'wrap',
@@ -315,6 +524,17 @@ function createStyles(theme: ReturnType<typeof useAppTheme>['theme']) {
     },
     filterChipTextActive: {
       color: theme.colors.white,
+    },
+    monthInput: {
+      marginTop: theme.spacing.sm,
+      backgroundColor: theme.colors.surfaceMuted,
+      borderRadius: theme.radius.lg,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      paddingHorizontal: theme.spacing.md,
+      paddingVertical: 12,
+      color: theme.colors.text,
+      fontSize: 15,
     },
     favoriteToggle: {
       flexDirection: 'row',

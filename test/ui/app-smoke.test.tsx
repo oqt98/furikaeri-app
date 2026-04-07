@@ -60,12 +60,11 @@ describe('app smoke', () => {
     });
 
     fireEvent.press(screen.getByLabelText('メニューを開く'));
-    fireEvent.press(screen.getByText('大切な日'));
+    fireEvent.press(screen.getAllByText('大切な日')[0]);
 
     await waitFor(() => {
-      expect(screen.getByText('大切な日')).toBeOnTheScreen();
+      expect(result.getPathname()).toBe('/important-days');
     });
-    expect(result.getPathname()).toBe('/important-days');
   });
 
   it('navigates between main tabs without breaking routing', async () => {
@@ -80,14 +79,18 @@ describe('app smoke', () => {
     await waitFor(() => {
       expect(result.getPathname()).toBe('/history');
     });
-    expect(screen.getByTestId('tab-history')).toBeOnTheScreen();
+
+    fireEvent.press(screen.getByTestId('tab-calendar'));
+
+    await waitFor(() => {
+      expect(result.getPathname()).toBe('/calendar');
+    });
 
     fireEvent.press(screen.getByTestId('tab-analytics'));
 
     await waitFor(() => {
       expect(result.getPathname()).toBe('/analytics');
     });
-    expect(screen.getByTestId('tab-analytics')).toBeOnTheScreen();
   });
 
   it('renders templates after starting a new record', async () => {

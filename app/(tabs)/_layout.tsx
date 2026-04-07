@@ -90,6 +90,21 @@ export default function TabsLayout() {
         }}
       />
       <Tabs.Screen
+        name="calendar"
+        options={{
+          title: 'カレンダー',
+          tabBarButtonTestID: 'tab-calendar',
+          tabBarIcon: ({ color, size, focused }) => (
+            <TabIcon
+              name={focused ? 'calendar' : 'calendar-outline'}
+              size={size}
+              color={color}
+              focused={focused}
+            />
+          ),
+        }}
+      />
+      <Tabs.Screen
         name="analytics"
         options={{
           title: '分析',
@@ -104,7 +119,6 @@ export default function TabsLayout() {
           ),
         }}
       />
-      <Tabs.Screen name="calendar" options={{ href: null }} />
       <Tabs.Screen name="settings" options={{ href: null }} />
       <Tabs.Screen name="templates" options={{ href: null }} />
       <Tabs.Screen name="entry" options={{ href: null }} />

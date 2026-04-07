@@ -13,7 +13,7 @@ export default function ThemeScreen() {
     <ScrollView contentContainerStyle={styles.container}>
       <BackHeader
         title="テーマ"
-        subtitle="見た目は3種類だけに絞って、迷いにくくしています。"
+        subtitle="読みやすさを保ちながら、気分に合わせて色を選べます。"
       />
 
       {themeOptions.map((option) => {

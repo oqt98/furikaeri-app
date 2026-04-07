@@ -2,7 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const IMPORTANT_DAYS_KEY = 'furikaeri-important-days';
 
-export type ImportantDayType = '旅行' | '誕生日' | '記念日' | 'その他';
+export type ImportantDayType = '記念日' | '誕生日' | '大切な日' | 'その他';
 
 export type ImportantDay = {
   id: string;
@@ -14,9 +14,9 @@ export type ImportantDay = {
 };
 
 export const IMPORTANT_DAY_TYPES: ImportantDayType[] = [
-  '旅行',
-  '誕生日',
   '記念日',
+  '誕生日',
+  '大切な日',
   'その他',
 ];
 
@@ -81,6 +81,18 @@ export function formatImportantDayCountdown(dateString: string) {
   if (diff === 0) return '今日です';
   if (diff === 1) return 'あと1日';
   return `あと${diff}日`;
+}
+
+export function isValidImportantDayDate(dateString: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateString)) return false;
+
+  const [year, month, day] = dateString.split('-').map(Number);
+  const candidate = new Date(year, month - 1, day);
+  return (
+    candidate.getFullYear() === year &&
+    candidate.getMonth() === month - 1 &&
+    candidate.getDate() === day
+  );
 }
 
 function nextOccurrence(dateString: string) {

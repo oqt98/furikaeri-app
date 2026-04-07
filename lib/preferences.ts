@@ -7,7 +7,16 @@ const ONBOARDING_KEY = 'furikaeri-onboarding-complete';
 export async function getThemePreference(): Promise<ThemeName> {
   try {
     const raw = await AsyncStorage.getItem(THEME_KEY);
-    if (raw === 'light' || raw === 'dark' || raw === 'warm') {
+    if (
+      raw === 'light' ||
+      raw === 'warm' ||
+      raw === 'rose' ||
+      raw === 'amber' ||
+      raw === 'green' ||
+      raw === 'mint' ||
+      raw === 'blue' ||
+      raw === 'navy'
+    ) {
       return raw;
     }
   } catch (error) {

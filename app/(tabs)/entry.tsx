@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
-import { router, useLocalSearchParams } from 'expo-router';
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
   Alert,
   Image,
@@ -22,6 +22,11 @@ import {
 import { templates } from '../../data/templates';
 import type { TagDefinition } from '../../data/tags';
 import {
+  clearEntryDraft,
+  getEntryDraft,
+  saveEntryDraft,
+} from '../../lib/entryDraft';
+import {
   DuplicateReviewDateError,
   getReviewByDateKey,
   getReviewById,
@@ -33,6 +38,8 @@ import {
 } from '../../lib/storage';
 import { useAppTheme } from '../../lib/theme-context';
 import { createCardShadow } from '../../lib/theme';
+
+const COMMON_MEMO_KEY = 'memo';
 
 type TagCatalogState = {
   action: TagDefinition[];
@@ -47,12 +54,14 @@ export default function EntryScreen() {
   }>();
   const { theme } = useAppTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
-
-  const initialTemplate =
+  const isEditMode = Boolean(reviewId);
+  const draftKey = isEditMode ? `edit:${reviewId}` : 'new';
+  const requestedTemplate =
     templates.find((item) => item.id === templateId) ?? templates[0];
-  const initialDateKey = isValidDateKey(date) ? date : toDateKey(new Date());
-  const [selectedTemplateId, setSelectedTemplateId] = useState(initialTemplate.id);
-  const [selectedDateKey, setSelectedDateKey] = useState(initialDateKey);
+  const requestedDateKey = isValidDateKey(date) ? date : toDateKey(new Date());
+
+  const [selectedTemplateId, setSelectedTemplateId] = useState(requestedTemplate.id);
+  const [selectedDateKey, setSelectedDateKey] = useState(requestedDateKey);
   const [category, setCategory] = useState<CategoryOption>(CATEGORIES[0]);
   const [mood, setMood] = useState<MoodValue>(3);
   const [answers, setAnswers] = useState<Record<string, string>>({});
@@ -62,49 +71,91 @@ export default function EntryScreen() {
   const [tagCatalog, setTagCatalog] = useState<TagCatalogState>({ action: [], state: [] });
   const [editingReview, setEditingReview] = useState<ReviewItem | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isDraftReady, setIsDraftReady] = useState(false);
 
   const selectedTemplate =
     templates.find((item) => item.id === selectedTemplateId) ?? templates[0];
-  const mainField =
-    selectedTemplate.fields[0] ?? { key: 'memo', label: '本文', multiline: true };
-  const secondaryFields = selectedTemplate.fields.slice(1);
-  const isEditMode = Boolean(reviewId);
+  const templateQuestions = selectedTemplate.fields.filter(
+    (field) => field.key !== COMMON_MEMO_KEY
+  );
+  const saveLabel = isEditMode ? '更新する' : '保存する';
+
+  const loadTagCatalog = useCallback(async () => {
+    const catalog = await getTagCatalog();
+    setTagCatalog(catalog);
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      void loadTagCatalog();
+    }, [loadTagCatalog])
+  );
 
   useEffect(() => {
     let isMounted = true;
 
     const load = async () => {
       try {
-        const catalog = await getTagCatalog();
+        const [catalog, draft] = await Promise.all([getTagCatalog(), getEntryDraft(draftKey)]);
         if (!isMounted) return;
+
         setTagCatalog(catalog);
 
-        if (!reviewId) return;
+        if (reviewId) {
+          const review = await getReviewById(reviewId);
+          if (!review) {
+            Alert.alert('記録が見つかりませんでした');
+            router.replace('/(tabs)/history');
+            return;
+          }
+          if (!isMounted) return;
 
-        const review = await getReviewById(reviewId);
-        if (!review) {
-          Alert.alert('記録が見つかりませんでした。');
-          router.replace('/(tabs)/history');
-          return;
+          const mergedTemplateId = draft?.templateId ?? review.templateId ?? templates[0].id;
+          const mergedTemplate =
+            templates.find((item) => item.id === mergedTemplateId) ?? templates[0];
+          const mergedAnswers = filterAnswersForTemplate(
+            draft?.answers ?? review.answers ?? {},
+            mergedTemplate.id
+          );
+
+          setEditingReview(review);
+          setSelectedTemplateId(mergedTemplate.id);
+          setSelectedDateKey(
+            draft?.selectedDateKey && isValidDateKey(draft.selectedDateKey)
+              ? draft.selectedDateKey
+              : toDateKey(new Date(review.createdAt))
+          );
+          setCategory(draft?.category ?? review.category);
+          setMood(draft?.mood ?? review.mood ?? 3);
+          setAnswers(mergedAnswers);
+          setActionTagIds(draft?.actionTagIds ?? review.actionTagIds ?? []);
+          setStateTagIds(draft?.stateTagIds ?? review.stateTagIds ?? []);
+          setPhotos(draft?.photos ?? review.photos ?? []);
+        } else {
+          const nextTemplateId = templateId ?? draft?.templateId ?? templates[0].id;
+          const nextTemplate =
+            templates.find((item) => item.id === nextTemplateId) ?? templates[0];
+          const nextDateKey =
+            (isValidDateKey(date) ? date : undefined) ??
+            draft?.selectedDateKey ??
+            toDateKey(new Date());
+
+          setSelectedTemplateId(nextTemplate.id);
+          setSelectedDateKey(isValidDateKey(nextDateKey) ? nextDateKey : requestedDateKey);
+          setCategory(draft?.category ?? CATEGORIES[0]);
+          setMood(draft?.mood ?? 3);
+          setAnswers(filterAnswersForTemplate(draft?.answers ?? {}, nextTemplate.id));
+          setActionTagIds(draft?.actionTagIds ?? []);
+          setStateTagIds(draft?.stateTagIds ?? []);
+          setPhotos(draft?.photos ?? []);
         }
-
-        if (!isMounted) return;
-
-        setEditingReview(review);
-        setSelectedTemplateId(review.templateId ?? initialTemplate.id);
-        setSelectedDateKey(toDateKey(new Date(review.createdAt)));
-        setCategory(review.category);
-        setMood(review.mood ?? 3);
-        setAnswers(review.answers ?? {});
-        setActionTagIds(review.actionTagIds ?? []);
-        setStateTagIds(review.stateTagIds ?? []);
-        setPhotos(review.photos ?? []);
       } catch (error) {
         console.error(error);
-        Alert.alert('記録の読み込みに失敗しました。');
+        Alert.alert('記録の読み込みに失敗しました');
       } finally {
         if (isMounted) {
           setIsLoading(false);
+          setIsDraftReady(true);
         }
       }
     };
@@ -114,15 +165,50 @@ export default function EntryScreen() {
     return () => {
       isMounted = false;
     };
-  }, [initialTemplate.id, reviewId]);
+  }, [draftKey, requestedDateKey, reviewId, templateId, date]);
 
-  const saveLabel = isEditMode ? '更新する' : '保存する';
+  useEffect(() => {
+    if (isLoading || !isDraftReady || isEditMode) return;
+    if (!templateId || templateId === selectedTemplateId) return;
+
+    const nextTemplate =
+      templates.find((item) => item.id === templateId) ?? templates[0];
+    setSelectedTemplateId(nextTemplate.id);
+    setAnswers((current) => filterAnswersForTemplate(current, nextTemplate.id));
+  }, [isDraftReady, isEditMode, isLoading, selectedTemplateId, templateId]);
+
+  useEffect(() => {
+    if (isLoading || !isDraftReady) return;
+
+    void saveEntryDraft(draftKey, {
+      templateId: selectedTemplateId,
+      selectedDateKey,
+      category,
+      mood,
+      answers,
+      actionTagIds,
+      stateTagIds,
+      photos,
+    });
+  }, [
+    actionTagIds,
+    answers,
+    category,
+    draftKey,
+    isDraftReady,
+    isLoading,
+    mood,
+    photos,
+    selectedDateKey,
+    selectedTemplateId,
+    stateTagIds,
+  ]);
 
   const handlePickImage = async () => {
     try {
       const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!permission.granted) {
-        Alert.alert('写真へのアクセスを許可してください。');
+        Alert.alert('写真ライブラリへのアクセスを許可してください');
         return;
       }
 
@@ -145,13 +231,13 @@ export default function EntryScreen() {
       setPhotos((prev) => [...prev, ...next]);
     } catch (error) {
       console.error(error);
-      Alert.alert('写真の追加に失敗しました。');
+      Alert.alert('写真の追加に失敗しました');
     }
   };
 
   const handleSave = async () => {
     if (!isValidDateKey(selectedDateKey)) {
-      Alert.alert('日付は YYYY-MM-DD で入力してください。');
+      Alert.alert('日付は YYYY-MM-DD 形式で入力してください');
       return;
     }
 
@@ -162,7 +248,7 @@ export default function EntryScreen() {
       photos.length > 0;
 
     if (!hasInput) {
-      Alert.alert('まだ入力がありません。', 'ひとことだけでも残してから保存してみましょう。');
+      Alert.alert('入力がまだありません', 'ひとことだけでも残してから保存してください。');
       return;
     }
 
@@ -170,8 +256,8 @@ export default function EntryScreen() {
       const existingReview = await getReviewByDateKey(selectedDateKey, editingReview?.id);
       if (existingReview) {
         Alert.alert(
-          '同じ日付の記録があります。',
-          'その日の記録は1件だけにしたい場合は、既存の記録を編集してください。'
+          '同じ日付の記録があります',
+          'その日の記録は1件までです。既存の記録を編集してください。'
         );
         return;
       }
@@ -186,7 +272,7 @@ export default function EntryScreen() {
         templateName: selectedTemplate.name,
         actionTagIds,
         stateTagIds,
-        answers,
+        answers: filterAnswersForTemplate(answers, selectedTemplate.id),
         photos: photos.map((photo, index) => ({ ...photo, order: index })),
         isFavorite: editingReview?.isFavorite ?? false,
       };
@@ -197,14 +283,15 @@ export default function EntryScreen() {
         await saveReview(payload);
       }
 
+      await clearEntryDraft(draftKey);
       router.replace('/(tabs)/history');
     } catch (error) {
       console.error(error);
       if (error instanceof DuplicateReviewDateError) {
-        Alert.alert('同じ日付の記録があります。');
+        Alert.alert('同じ日付の記録があります');
         return;
       }
-      Alert.alert('保存に失敗しました。');
+      Alert.alert('保存に失敗しました');
     }
   };
 
@@ -219,8 +306,8 @@ export default function EntryScreen() {
   return (
     <ScrollView contentContainerStyle={styles.container}>
       <BackHeader
-        title={isEditMode ? '記録を編集' : '記録を書く'}
-        subtitle="大きめの入力欄で、今日のことを気軽に残せます。"
+        title={isEditMode ? '記録を編集' : '記録を作成'}
+        subtitle="軽く選んで、必要なところだけ書ける流れにしています。"
       />
 
       <View style={styles.templateCard}>
@@ -230,7 +317,15 @@ export default function EntryScreen() {
             <Text style={styles.templateTitle}>{selectedTemplate.name}</Text>
             <Text style={styles.templateBody}>{selectedTemplate.description}</Text>
           </View>
-          <Pressable style={styles.switchTemplateButton} onPress={() => router.replace('/templates')}>
+          <Pressable
+            style={styles.switchTemplateButton}
+            onPress={() =>
+              router.push({
+                pathname: '/templates',
+                params: { date: selectedDateKey },
+              })
+            }
+          >
             <Text style={styles.switchTemplateButtonText}>変更</Text>
           </Pressable>
         </View>
@@ -244,48 +339,10 @@ export default function EntryScreen() {
           onChangeText={setSelectedDateKey}
           placeholder="2026-04-07"
           placeholderTextColor={theme.colors.textSoft}
+          autoCapitalize="none"
         />
-        <Text style={styles.helperText}>あとから見返しやすいように、日付だけ先に決めます。</Text>
+        <Text style={styles.helperText}>あとから見返しやすいように、日付をそろえて残せます。</Text>
       </View>
-
-      <View style={styles.sectionCard}>
-        <Text style={styles.sectionLabel}>{mainField.label}</Text>
-        <Text style={styles.sectionTitle}>今日のメインメモ</Text>
-        <TextInput
-          style={styles.mainInput}
-          multiline
-          textAlignVertical="top"
-          placeholder="今日のことを、ひとことでも大丈夫です。"
-          placeholderTextColor={theme.colors.textSoft}
-          value={answers[mainField.key] ?? ''}
-          onChangeText={(text) => setAnswers((prev) => ({ ...prev, [mainField.key]: text }))}
-        />
-      </View>
-
-      {secondaryFields.length > 0 ? (
-        <View style={styles.sectionCard}>
-          <Text style={styles.sectionLabel}>補足</Text>
-          {secondaryFields.map((field) => (
-            <View key={field.key} style={styles.fieldBlock}>
-              <Text style={styles.fieldLabel}>{field.label}</Text>
-              <TextInput
-                style={[styles.subInput, field.multiline !== false && styles.subInputMultiline]}
-                multiline={field.multiline !== false}
-                textAlignVertical="top"
-                placeholder={`${field.label}を書く`}
-                placeholderTextColor={theme.colors.textSoft}
-                value={answers[field.key] ?? ''}
-                onChangeText={(text) =>
-                  setAnswers((prev) => ({
-                    ...prev,
-                    [field.key]: text,
-                  }))
-                }
-              />
-            </View>
-          ))}
-        </View>
-      ) : null}
 
       <ChoiceSection title="気分" styles={styles}>
         <View style={styles.choiceWrap}>
@@ -328,8 +385,10 @@ export default function EntryScreen() {
 
       <TagChoiceSection
         title="行動タグ"
+        manageLabel="管理"
         tags={tagCatalog.action.filter((tag) => !tag.isArchived)}
         selectedIds={actionTagIds}
+        onPressManage={() => router.push('/tags')}
         onToggle={(tagId) =>
           setActionTagIds((prev) =>
             prev.includes(tagId) ? prev.filter((item) => item !== tagId) : [...prev, tagId]
@@ -339,8 +398,10 @@ export default function EntryScreen() {
 
       <TagChoiceSection
         title="状態タグ"
+        manageLabel="管理"
         tags={tagCatalog.state.filter((tag) => !tag.isArchived)}
         selectedIds={stateTagIds}
+        onPressManage={() => router.push('/tags')}
         onToggle={(tagId) =>
           setStateTagIds((prev) =>
             prev.includes(tagId) ? prev.filter((item) => item !== tagId) : [...prev, tagId]
@@ -349,10 +410,54 @@ export default function EntryScreen() {
       />
 
       <View style={styles.sectionCard}>
+        <Text style={styles.sectionLabel}>ひとことメモ</Text>
+        <TextInput
+          style={styles.memoInput}
+          multiline
+          textAlignVertical="top"
+          placeholder="今日のひとことを短く残せます"
+          placeholderTextColor={theme.colors.textSoft}
+          value={answers[COMMON_MEMO_KEY] ?? ''}
+          onChangeText={(text) =>
+            setAnswers((prev) => ({
+              ...prev,
+              [COMMON_MEMO_KEY]: text,
+            }))
+          }
+        />
+      </View>
+
+      {templateQuestions.length > 0 ? (
+        <View style={styles.sectionCard}>
+          <Text style={styles.sectionLabel}>テンプレ質問</Text>
+          <Text style={styles.sectionTitle}>{selectedTemplate.name}の質問</Text>
+          {templateQuestions.map((field) => (
+            <View key={field.key} style={styles.fieldBlock}>
+              <Text style={styles.fieldLabel}>{field.label}</Text>
+              <TextInput
+                style={[styles.subInput, field.multiline !== false && styles.subInputMultiline]}
+                multiline={field.multiline !== false}
+                textAlignVertical="top"
+                placeholder={`${field.label}を入力`}
+                placeholderTextColor={theme.colors.textSoft}
+                value={answers[field.key] ?? ''}
+                onChangeText={(text) =>
+                  setAnswers((prev) => ({
+                    ...prev,
+                    [field.key]: text,
+                  }))
+                }
+              />
+            </View>
+          ))}
+        </View>
+      ) : null}
+
+      <View style={styles.sectionCard}>
         <View style={styles.photoHeader}>
           <View style={styles.flexFill}>
             <Text style={styles.sectionLabel}>写真</Text>
-            <Text style={styles.helperText}>必要なときだけ添えられます。</Text>
+            <Text style={styles.helperText}>必要なときだけ添えて、ふりかえりの手がかりにできます。</Text>
           </View>
           <Pressable style={styles.switchTemplateButton} onPress={handlePickImage}>
             <Text style={styles.switchTemplateButtonText}>追加</Text>
@@ -367,9 +472,7 @@ export default function EntryScreen() {
               <Image source={{ uri: photo.uri }} style={styles.photoPreview} />
               <Pressable
                 style={styles.photoRemoveButton}
-                onPress={() =>
-                  setPhotos((prev) => prev.filter((item) => item.id !== photo.id))
-                }
+                onPress={() => setPhotos((prev) => prev.filter((item) => item.id !== photo.id))}
               >
                 <Ionicons name="close" size={16} color={theme.colors.danger} />
               </Pressable>
@@ -378,12 +481,10 @@ export default function EntryScreen() {
                 value={photo.comment}
                 onChangeText={(text) =>
                   setPhotos((prev) =>
-                    prev.map((item) =>
-                      item.id === photo.id ? { ...item, comment: text } : item
-                    )
+                    prev.map((item) => (item.id === photo.id ? { ...item, comment: text } : item))
                   )
                 }
-                placeholder="写真のメモ"
+                placeholder="写真メモ"
                 placeholderTextColor={theme.colors.textSoft}
               />
             </View>
@@ -417,38 +518,62 @@ function ChoiceSection({
 
 function TagChoiceSection({
   title,
+  manageLabel,
   tags,
   selectedIds,
   onToggle,
+  onPressManage,
 }: {
   title: string;
+  manageLabel: string;
   tags: TagDefinition[];
   selectedIds: string[];
   onToggle: (tagId: string) => void;
+  onPressManage: () => void;
 }) {
   const { theme } = useAppTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
 
   return (
     <View style={styles.sectionCard}>
-      <Text style={styles.sectionLabel}>{title}</Text>
-      <View style={styles.choiceWrap}>
-        {tags.map((tag) => {
-          const active = selectedIds.includes(tag.id);
-          return (
-            <Pressable
-              key={tag.id}
-              style={[styles.choiceChip, active && styles.choiceChipActive]}
-              onPress={() => onToggle(tag.id)}
-            >
-              <Text style={[styles.choiceChipText, active && styles.choiceChipTextActive]}>
-                {tag.label}
-              </Text>
-            </Pressable>
-          );
-        })}
+      <View style={styles.sectionHeader}>
+        <Text style={styles.sectionLabel}>{title}</Text>
+        <Pressable onPress={onPressManage}>
+          <Text style={styles.manageLink}>{manageLabel}</Text>
+        </Pressable>
       </View>
+      {tags.length === 0 ? (
+        <Text style={styles.helperText}>タグがまだありません。管理から追加できます。</Text>
+      ) : (
+        <View style={styles.choiceWrap}>
+          {tags.map((tag) => {
+            const active = selectedIds.includes(tag.id);
+            return (
+              <Pressable
+                key={tag.id}
+                style={[styles.choiceChip, active && styles.choiceChipActive]}
+                onPress={() => onToggle(tag.id)}
+              >
+                <Text style={[styles.choiceChipText, active && styles.choiceChipTextActive]}>
+                  {tag.label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      )}
     </View>
+  );
+}
+
+function filterAnswersForTemplate(currentAnswers: Record<string, string>, templateId: string) {
+  const template = templates.find((item) => item.id === templateId) ?? templates[0];
+  const allowedKeys = new Set([COMMON_MEMO_KEY, ...template.fields.map((field) => field.key)]);
+
+  return Object.fromEntries(
+    Object.entries(currentAnswers).filter(
+      ([key, value]) => allowedKeys.has(key) && typeof value === 'string'
+    )
   );
 }
 
@@ -460,7 +585,14 @@ function toDateKey(date: Date) {
 }
 
 function isValidDateKey(value?: string): value is string {
-  return Boolean(value && /^\d{4}-\d{2}-\d{2}$/.test(value));
+  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const [year, month, day] = value.split('-').map(Number);
+  const candidate = new Date(year, month - 1, day);
+  return (
+    candidate.getFullYear() === year &&
+    candidate.getMonth() === month - 1 &&
+    candidate.getDate() === day
+  );
 }
 
 function mergeDateWithTime(dateKey: string, baseIso?: string) {
@@ -534,6 +666,13 @@ function createStyles(theme: ReturnType<typeof useAppTheme>['theme']) {
       padding: theme.spacing.xl,
       marginBottom: theme.spacing.md,
     },
+    sectionHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: theme.spacing.sm,
+      marginBottom: theme.spacing.sm,
+    },
     sectionLabel: {
       ...theme.typography.caption,
       color: theme.colors.textSoft,
@@ -558,6 +697,11 @@ function createStyles(theme: ReturnType<typeof useAppTheme>['theme']) {
       color: theme.colors.textSoft,
       marginTop: theme.spacing.sm,
     },
+    manageLink: {
+      ...theme.typography.caption,
+      color: theme.colors.primaryDark,
+      marginBottom: theme.spacing.sm,
+    },
     dateInput: {
       backgroundColor: theme.colors.surfaceMuted,
       borderRadius: theme.radius.lg,
@@ -569,8 +713,8 @@ function createStyles(theme: ReturnType<typeof useAppTheme>['theme']) {
       fontSize: 16,
       fontWeight: '600',
     },
-    mainInput: {
-      minHeight: 200,
+    memoInput: {
+      minHeight: 140,
       backgroundColor: theme.colors.surfaceMuted,
       borderRadius: theme.radius.xl,
       borderWidth: 1,
