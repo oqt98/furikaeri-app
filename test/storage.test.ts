@@ -41,7 +41,7 @@ describe('lib/storage', () => {
         {
           id: 'legacy-1',
           createdAt: '2026-04-05T09:00:00',
-          category: '仕事',
+          category: 'プライベート',
           mood: '😊 よかった',
           templateId: 'kpt',
           tags: ['読書', '忙しい'],
@@ -127,8 +127,8 @@ describe('lib/storage', () => {
         createdAt: '2026-04-03T09:00:00',
         category: CATEGORIES[0],
         mood: 5,
-        templateName: 'CSV取込',
-        actionTags: ['集中', '新規タグ'],
+        templateName: 'CSV取り込み',
+        actionTags: ['集中', '新しいタグ'],
         stateTags: ['疲れた'],
         answers: { note: 'imported' },
       },
@@ -160,13 +160,13 @@ describe('lib/storage', () => {
 
     const reviews = await getReviews();
     expect(reviews).toHaveLength(2);
-    expect(reviews[0].templateName).toBe('CSV取込');
+    expect(reviews[0].templateName).toBe('CSV取り込み');
     expect(reviews[0].actionTagIds).toHaveLength(2);
     expect(reviews[0].stateTagIds).toHaveLength(1);
 
     const tagCatalog = await getTagCatalog();
     const focusTag = tagCatalog.action.find((tag) => tag.id === 'action-focus');
-    const newActionTag = tagCatalog.action.find((tag) => tag.label === '新規タグ');
+    const newActionTag = tagCatalog.action.find((tag) => tag.label === '新しいタグ');
     const tiredTag = tagCatalog.state.find((tag) => tag.label === '疲れた');
 
     expect(focusTag?.isArchived).toBe(false);

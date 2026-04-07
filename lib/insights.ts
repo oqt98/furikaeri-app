@@ -12,10 +12,10 @@ type InsightSummary = {
 export function buildInsightSummary(reviews: ReviewItem[]): InsightSummary {
   if (reviews.length === 0) {
     return {
-      weeklyTitle: '最初の1件から始めましょう',
-      weeklyBody: '短くても十分です。今日のことを一つだけ残せば見返す土台になります。',
-      nextTitle: 'まずは軽く続ける',
-      nextBody: '長く書くより、続けやすいテンプレートをひとつ決める方が効果的です。',
+      weeklyTitle: 'まずは1件から始めましょう',
+      weeklyBody: '長く書かなくても大丈夫です。今日のことを少しだけ残すところから始められます。',
+      nextTitle: '次の一歩',
+      nextBody: 'テンプレートを1つ選んで、ひとことだけでも記録してみましょう。',
       weeklyStats: [
         { label: '今週の記録', value: '0件' },
         { label: '連続日数', value: '0日' },
@@ -40,17 +40,17 @@ export function buildInsightSummary(reviews: ReviewItem[]): InsightSummary {
   const topTemplate = mostCommon(last7Days.map((item) => item.templateName));
   const topStateTag = mostCommon(last7Days.flatMap((item) => item.stateTagIds));
 
-  const weeklyParts = [
+  const parts = [
     `${last7Days.length}件の記録`,
     streak > 0 ? `連続 ${streak}日` : null,
-    topMoodValue ? `気分は ${getMoodOption(topMoodValue).label} が多め` : null,
-    topTemplate ? `${topTemplate} をよく使用` : null,
+    topMoodValue ? `気分は「${getMoodOption(topMoodValue).label}」が多めです` : null,
+    topTemplate ? `よく使っているのは「${topTemplate}」です` : null,
   ].filter(Boolean);
 
   return {
-    weeklyTitle: '直近1週間のメモ',
-    weeklyBody: weeklyParts.join(' / '),
-    nextTitle: '次の日へのヒント',
+    weeklyTitle: '今週のふりかえりメモ',
+    weeklyBody: parts.join('。') + '。',
+    nextTitle: '次の一歩',
     nextBody: buildNextHint({ topMoodValue, topStateTag, topTemplate, streak }),
     weeklyStats: [
       { label: '今週の記録', value: `${last7Days.length}件` },
@@ -72,22 +72,22 @@ function buildNextHint({
   streak: number;
 }) {
   if (topMoodValue && topMoodValue <= 2) {
-    return '入力を増やしすぎず、短いテンプレートで済ませる日にしておくと続けやすいです。';
+    return 'しんどい日は、短いテンプレートでひとことだけ残す形でも十分です。';
   }
 
   if (topStateTag) {
-    return '状態タグが偏っているなら、その背景を1行だけ本文に残すと後で見返しやすくなります。';
+    return `最近は状態タグ「${topStateTag}」が続いています。次の記録でも気分の変化を見てみましょう。`;
   }
 
   if (topTemplate) {
-    return `${topTemplate} が合っていそうです。迷う日は同じ型を続ける方が負荷が低くなります。`;
+    return `最近は「${topTemplate}」が合っているようです。迷う日は同じ型で続けてみるのもおすすめです。`;
   }
 
   if (streak >= 3) {
-    return '連続して残せているので、写真やタグは必要な日だけ足す運用で十分です。';
+    return '続いているので、今日は無理せず短く書いてリズムを保つのがよさそうです。';
   }
 
-  return '気分とひとことだけでも残すと、次の日の比較材料になります。';
+  return '気分とひとことだけでも残すと、次の日の自分が見返しやすくなります。';
 }
 
 function getLast7DaysReviews(reviews: ReviewItem[]) {
@@ -115,7 +115,6 @@ function toDateKey(date: Date) {
   const year = date.getFullYear();
   const month = `${date.getMonth() + 1}`.padStart(2, '0');
   const day = `${date.getDate()}`.padStart(2, '0');
-
   return `${year}-${month}-${day}`;
 }
 

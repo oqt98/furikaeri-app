@@ -1,17 +1,17 @@
 import { Ionicons } from '@expo/vector-icons';
-import DraggableFlatList, {
-  ScaleDecorator,
-  type RenderItemParams,
-} from 'react-native-draggable-flatlist';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
-import { useCallback, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { getOrderedTemplates, getTemplateOrder, saveTemplateOrder } from '../../lib/storage';
-import { brand, cardShadow, theme } from '../../lib/theme';
-import type { ReviewTemplate } from '../../data/templates';
+import { useCallback, useMemo, useState } from 'react';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import BackHeader from '../../components/BackHeader';
+import { type ReviewTemplate } from '../../data/templates';
+import { getOrderedTemplates, getTemplateOrder } from '../../lib/storage';
+import { useAppTheme } from '../../lib/theme-context';
+import { createCardShadow } from '../../lib/theme';
 
 export default function TemplatesScreen() {
   const { date } = useLocalSearchParams<{ date?: string }>();
+  const { theme } = useAppTheme();
+  const styles = useMemo(() => createStyles(theme), [theme]);
   const [items, setItems] = useState<ReviewTemplate[]>([]);
 
   useFocusEffect(
@@ -20,198 +20,120 @@ export default function TemplatesScreen() {
     }, [])
   );
 
-  const handleSelect = (templateId: string) => {
-    router.push({
-      pathname: '/entry',
-      params: date ? { templateId, date } : { templateId },
-    });
-  };
-
-  const handleRandom = () => {
-    router.push({
-      pathname: '/entry',
-      params: date ? { templateId: 'random', date } : { templateId: 'random' },
-    });
-  };
-
-  const renderItem = ({
-    item,
-    drag,
-    isActive,
-  }: RenderItemParams<ReviewTemplate>) => (
-    <ScaleDecorator>
-      <Pressable
-        testID={`template-card-${item.id}`}
-        onPress={() => handleSelect(item.id)}
-        style={[styles.templateCard, isActive && styles.activeCard]}
-      >
-        <View style={styles.templateHeader}>
-          <View style={styles.modeBadge}>
-            <Text style={styles.modeBadgeText}>{item.mode}</Text>
-          </View>
-          <Pressable style={styles.dragButton} onLongPress={drag}>
-            <Ionicons name="reorder-three-outline" size={20} color={theme.colors.textSoft} />
-          </Pressable>
-        </View>
-
-        <Text style={styles.templateName}>{item.name}</Text>
-        <Text style={styles.templateDescription}>{item.description}</Text>
-      </Pressable>
-    </ScaleDecorator>
-  );
-
   return (
-    <View style={styles.container}>
-      <DraggableFlatList
-        data={items}
-        keyExtractor={(item) => item.id}
-        renderItem={renderItem}
-        onDragEnd={({ data }) => {
-          setItems(data);
-          void saveTemplateOrder(data.map((item) => item.id));
-        }}
-        contentContainerStyle={styles.content}
-        activationDistance={16}
-        ListHeaderComponent={
-          <View style={styles.header}>
-            <View style={styles.headerTop}>
-              <Pressable style={styles.backButton} onPress={() => router.back()}>
-                <Ionicons name="chevron-back" size={18} color={theme.colors.primaryDark} />
-              </Pressable>
-              <View style={styles.headerText}>
-                <Text style={styles.brand}>{brand.name}</Text>
-                <Text style={styles.title}>テンプレートを選ぶ</Text>
-                <Text style={styles.subtitle}>
-                  長押しドラッグで並び替えできます。順番は次回も維持されます。
-                </Text>
-              </View>
-            </View>
-
-            <Pressable testID="templates-random-button" style={styles.randomCard} onPress={handleRandom}>
-              <View>
-                <Text style={styles.randomTitle}>おまかせで選ぶ</Text>
-                <Text style={styles.randomText}>
-                  迷う日はランダムで 1 つ選びます。
-                </Text>
-              </View>
-              <Ionicons name="shuffle-outline" size={20} color={theme.colors.primaryDark} />
-            </Pressable>
-          </View>
-        }
+    <ScrollView contentContainerStyle={styles.container}>
+      <BackHeader
+        title="テンプレートを選ぶ"
+        subtitle="その日の気分に合う書き方を、ひとつ選ぶだけです。"
       />
-    </View>
+
+      <Pressable
+        style={styles.quickCard}
+        onPress={() =>
+          router.push({
+            pathname: '/entry',
+            params: date ? { templateId: items[0]?.id, date } : { templateId: items[0]?.id },
+          })
+        }
+      >
+        <View style={styles.quickText}>
+          <Text style={styles.quickTitle}>まずはシンプルに書く</Text>
+          <Text style={styles.quickBody}>「ひとことメモ」で、すぐに記録を始められます。</Text>
+        </View>
+        <Ionicons name="flash-outline" size={20} color={theme.colors.primaryDark} />
+      </Pressable>
+
+      {items.map((item) => (
+        <Pressable
+          key={item.id}
+          style={styles.templateCard}
+          onPress={() =>
+            router.push({
+              pathname: '/entry',
+              params: date ? { templateId: item.id, date } : { templateId: item.id },
+            })
+          }
+        >
+          <View style={styles.templateHeader}>
+            <Text style={styles.templateTitle}>{item.name}</Text>
+            <View style={styles.modeBadge}>
+              <Text style={styles.modeBadgeText}>{item.mode}</Text>
+            </View>
+          </View>
+          <Text style={styles.templateDescription}>{item.description}</Text>
+        </Pressable>
+      ))}
+    </ScrollView>
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: theme.colors.background,
-  },
-  content: {
-    padding: theme.spacing.xl,
-    paddingBottom: 120,
-  },
-  header: {
-    marginTop: theme.spacing.md,
-    marginBottom: theme.spacing.lg,
-  },
-  headerTop: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: theme.spacing.md,
-    marginBottom: theme.spacing.xl,
-  },
-  backButton: {
-    width: 40,
-    height: 40,
-    borderRadius: theme.radius.pill,
-    backgroundColor: theme.colors.primarySoft,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  headerText: {
-    flex: 1,
-  },
-  brand: {
-    ...theme.typography.caption,
-    color: theme.colors.primaryDark,
-    marginBottom: theme.spacing.sm,
-  },
-  title: {
-    ...theme.typography.title,
-    color: theme.colors.text,
-    marginBottom: theme.spacing.sm,
-  },
-  subtitle: {
-    ...theme.typography.body,
-    color: theme.colors.textMuted,
-  },
-  randomCard: {
-    ...cardShadow,
-    backgroundColor: theme.colors.primarySoft,
-    borderRadius: theme.radius.xl,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    padding: theme.spacing.xl,
-    marginBottom: theme.spacing.lg,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    gap: theme.spacing.md,
-  },
-  randomTitle: {
-    ...theme.typography.section,
-    color: theme.colors.primaryDark,
-    marginBottom: theme.spacing.sm,
-  },
-  randomText: {
-    ...theme.typography.body,
-    color: theme.colors.textMuted,
-  },
-  templateCard: {
-    ...cardShadow,
-    backgroundColor: theme.colors.surface,
-    borderRadius: theme.radius.xl,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    padding: theme.spacing.xl,
-    marginBottom: theme.spacing.md,
-  },
-  activeCard: {
-    opacity: 0.9,
-  },
-  templateHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: theme.spacing.md,
-  },
-  modeBadge: {
-    backgroundColor: theme.colors.surfaceMuted,
-    borderRadius: theme.radius.pill,
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: 6,
-  },
-  modeBadgeText: {
-    ...theme.typography.caption,
-    color: theme.colors.textMuted,
-  },
-  dragButton: {
-    width: 36,
-    height: 36,
-    borderRadius: theme.radius.pill,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  templateName: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: theme.colors.text,
-    marginBottom: theme.spacing.sm,
-  },
-  templateDescription: {
-    ...theme.typography.body,
-    color: theme.colors.textMuted,
-  },
-});
+function createStyles(theme: ReturnType<typeof useAppTheme>['theme']) {
+  return StyleSheet.create({
+    container: {
+      flexGrow: 1,
+      backgroundColor: theme.colors.background,
+      padding: theme.spacing.xl,
+      paddingBottom: 96,
+    },
+    quickCard: {
+      ...createCardShadow(theme),
+      backgroundColor: theme.colors.primarySoft,
+      borderRadius: theme.radius.xl,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      padding: theme.spacing.xl,
+      marginBottom: theme.spacing.lg,
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      gap: theme.spacing.md,
+    },
+    quickText: {
+      flex: 1,
+    },
+    quickTitle: {
+      ...theme.typography.section,
+      color: theme.colors.primaryDark,
+      marginBottom: theme.spacing.sm,
+    },
+    quickBody: {
+      ...theme.typography.body,
+      color: theme.colors.textMuted,
+    },
+    templateCard: {
+      ...createCardShadow(theme),
+      backgroundColor: theme.colors.surface,
+      borderRadius: theme.radius.xl,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      padding: theme.spacing.xl,
+      marginBottom: theme.spacing.md,
+    },
+    templateHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      gap: theme.spacing.md,
+      alignItems: 'flex-start',
+      marginBottom: theme.spacing.sm,
+    },
+    templateTitle: {
+      ...theme.typography.section,
+      color: theme.colors.text,
+      flex: 1,
+    },
+    modeBadge: {
+      backgroundColor: theme.colors.surfaceMuted,
+      borderRadius: theme.radius.pill,
+      paddingHorizontal: theme.spacing.md,
+      paddingVertical: 6,
+    },
+    modeBadgeText: {
+      ...theme.typography.caption,
+      color: theme.colors.textMuted,
+    },
+    templateDescription: {
+      ...theme.typography.body,
+      color: theme.colors.textMuted,
+    },
+  });
+}

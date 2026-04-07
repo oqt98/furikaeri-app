@@ -3,7 +3,7 @@ import { Tabs } from 'expo-router';
 import type { ComponentProps } from 'react';
 import { View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { theme } from '../../lib/theme';
+import { useAppTheme } from '../../lib/theme-context';
 
 function TabIcon({
   name,
@@ -16,6 +16,8 @@ function TabIcon({
   size: number;
   focused: boolean;
 }) {
+  const { theme } = useAppTheme();
+
   return (
     <View
       style={{
@@ -33,6 +35,7 @@ function TabIcon({
 }
 
 export default function TabsLayout() {
+  const { theme } = useAppTheme();
   const insets = useSafeAreaInsets();
 
   return (
@@ -59,7 +62,7 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: 'ホーム',
+          title: '記録',
           tabBarButtonTestID: 'tab-home',
           tabBarIcon: ({ color, size, focused }) => (
             <TabIcon
@@ -74,26 +77,11 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="history"
         options={{
-          title: '一覧',
+          title: '履歴',
           tabBarButtonTestID: 'tab-history',
           tabBarIcon: ({ color, size, focused }) => (
             <TabIcon
               name={focused ? 'albums' : 'albums-outline'}
-              size={size}
-              color={color}
-              focused={focused}
-            />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="calendar"
-        options={{
-          title: 'カレンダー',
-          tabBarButtonTestID: 'tab-calendar',
-          tabBarIcon: ({ color, size, focused }) => (
-            <TabIcon
-              name={focused ? 'calendar' : 'calendar-outline'}
               size={size}
               color={color}
               focused={focused}
@@ -116,21 +104,8 @@ export default function TabsLayout() {
           ),
         }}
       />
-      <Tabs.Screen
-        name="settings"
-        options={{
-          title: '設定',
-          tabBarButtonTestID: 'tab-settings',
-          tabBarIcon: ({ color, size, focused }) => (
-            <TabIcon
-              name={focused ? 'settings' : 'settings-outline'}
-              size={size}
-              color={color}
-              focused={focused}
-            />
-          ),
-        }}
-      />
+      <Tabs.Screen name="calendar" options={{ href: null }} />
+      <Tabs.Screen name="settings" options={{ href: null }} />
       <Tabs.Screen name="templates" options={{ href: null }} />
       <Tabs.Screen name="entry" options={{ href: null }} />
       <Tabs.Screen name="tags" options={{ href: null }} />

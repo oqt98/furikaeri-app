@@ -59,6 +59,8 @@ export type ImportReviewDraft = {
   mood?: MoodValue;
   templateId?: string;
   templateName: string;
+  actionTags?: string[];
+  stateTags?: string[];
   answers: Record<string, string>;
   isFavorite?: boolean;
   importSource?: 'notion-import';
@@ -184,14 +186,52 @@ export async function clearAllReviews(): Promise<void> {
 export async function importReviews(
   drafts: ImportReviewDraft[]
 ): Promise<ImportReviewsResult> {
-  const current = await getReviews();
+  const [current, tagCatalog] = await Promise.all([getReviews(), getTagCatalog()]);
   const skipped: ImportReviewsResult['skipped'] = [];
   const existingFingerprintMap = new Map(
     current
       .filter((item) => item.importFingerprint)
       .map((item) => [item.importFingerprint as string, item.id] as const)
   );
+  const tagLookup = buildLegacyTagLookup(tagCatalog);
   const accepted: ReviewItem[] = [];
+  let catalogChanged = false;
+
+  const ensureTagIds = (
+    labels: string[] | undefined,
+    type: TagType
+  ): string[] => {
+    const nextIds: string[] = [];
+
+    for (const rawLabel of labels ?? []) {
+      const trimmed = rawLabel.trim();
+      if (!trimmed) continue;
+
+      let existing = tagCatalog[type].find(
+        (item) => item.label.trim().toLowerCase() === trimmed.toLowerCase()
+      );
+
+      if (!existing) {
+        existing = {
+          id: `${type}-${Date.now()}-${nextIds.length}`,
+          label: trimmed,
+          type,
+          isArchived: false,
+          createdAt: new Date().toISOString(),
+        };
+        tagCatalog[type] = [existing, ...tagCatalog[type]];
+        tagLookup.set(existing.label, existing.id);
+        catalogChanged = true;
+      } else if (existing.isArchived) {
+        existing.isArchived = false;
+        catalogChanged = true;
+      }
+
+      nextIds.push(existing.id);
+    }
+
+    return dedupe(nextIds);
+  };
 
   drafts.forEach((draft, index) => {
     const createdAt = new Date(draft.createdAt);
@@ -226,6 +266,29 @@ export async function importReviews(
       return;
     }
 
+    const duplicateByDateInCurrent = current.find(
+      (item) => toDateKey(new Date(item.createdAt)) === toDateKey(createdAt)
+    );
+    if (duplicateByDateInCurrent) {
+      skipped.push({
+        sourceRowNumber: draft.sourceRowNumber,
+        reason: '同じ日付の記録がすでにあります。',
+        existingReviewId: duplicateByDateInCurrent.id,
+      });
+      return;
+    }
+
+    const duplicateByDateInDraft = accepted.find(
+      (item) => toDateKey(new Date(item.createdAt)) === toDateKey(createdAt)
+    );
+    if (duplicateByDateInDraft) {
+      skipped.push({
+        sourceRowNumber: draft.sourceRowNumber,
+        reason: 'CSV 内で同じ日付の行が重複しています。',
+      });
+      return;
+    }
+
     accepted.push(
       normalizeReviewForSave({
         id: `import-${Date.now()}-${index}`,
@@ -235,8 +298,8 @@ export async function importReviews(
         mood: draft.mood,
         templateId: draft.templateId,
         templateName: draft.templateName,
-        actionTagIds: [],
-        stateTagIds: [],
+        actionTagIds: ensureTagIds(draft.actionTags, 'action'),
+        stateTagIds: ensureTagIds(draft.stateTags, 'state'),
         answers: draft.answers,
         photos: [],
         isFavorite: draft.isFavorite ?? false,
@@ -254,6 +317,10 @@ export async function importReviews(
       STORAGE_KEY,
       JSON.stringify([...accepted, ...current].sort(sortReviewsByCreatedAtDesc))
     );
+  }
+
+  if (catalogChanged) {
+    await saveTagCatalog(tagCatalog);
   }
 
   return {

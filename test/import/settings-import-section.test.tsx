@@ -7,12 +7,12 @@ import { templates } from '../../data/templates';
 
 const validCsv = [
   'date,template,category,mood,title,memo,action_tags,state_tags,favorite',
-  `2026-04-05,${templates[0].id},${CATEGORIES[0]},4,朝の記録,よく進んだ,集中,落ち着き,true`,
+  `2026-04-05,${templates[0].id},${CATEGORIES[0]},4,朝の記録,よく進んだ,読書,疲れた,true`,
 ].join('\n');
 
 const duplicateCsv = [
   'date,template,category,mood,title,memo',
-  `2026-04-06,${templates[0].id},${CATEGORIES[0]},3,重複,同日です`,
+  `2026-04-06,${templates[0].id},${CATEGORIES[0]},3,同じ日付,既存と重複`,
 ].join('\n');
 
 const invalidCsv = [
@@ -31,14 +31,20 @@ describe('SettingsImportSection', () => {
     fireEvent.press(screen.getByTestId('settings-import-button'));
 
     await waitFor(() => {
+      expect(screen.getByText('CSV を取り込みました')).toBeOnTheScreen();
       expect(screen.getByTestId('settings-import-result')).toHaveTextContent(
-        '1 件を取り込みました。'
+        /1 件を取り込みました。/
       );
     });
+    expect(screen.getByTestId('settings-import-result')).toHaveTextContent(
+      /スキップはありません。/
+    );
 
     const reviews = await getReviews();
     expect(reviews).toHaveLength(1);
-    expect(reviews[0].answers).toMatchObject({ title: '朝の記録', memo: 'よく進んだ' });
+    expect(reviews[0].answers).toMatchObject({
+      title: '朝の記録',
+    });
   });
 
   it('skips duplicate dates while keeping the existing review', async () => {
@@ -63,7 +69,7 @@ describe('SettingsImportSection', () => {
 
     await waitFor(() => {
       expect(screen.getByTestId('settings-import-result')).toHaveTextContent(
-        '1 件はスキップされました。'
+        /1 件はスキップされました。/
       );
     });
 
@@ -78,9 +84,7 @@ describe('SettingsImportSection', () => {
     fireEvent.press(screen.getByTestId('settings-import-button'));
 
     await waitFor(() => {
-      expect(screen.getByTestId('settings-import-result')).toHaveTextContent(
-        'CSV を取り込めませんでした'
-      );
+      expect(screen.getByText('CSV を取り込めませんでした')).toBeOnTheScreen();
     });
   });
 

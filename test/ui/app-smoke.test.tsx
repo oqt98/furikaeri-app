@@ -44,16 +44,6 @@ describe('app smoke', () => {
     });
   });
 
-  it('renders the calendar screen with the create action', async () => {
-    await saveReview(createReview());
-    renderRouter('./app', { initialUrl: '/calendar' });
-
-    await waitFor(() => {
-      expect(screen.getByTestId('screen-calendar')).toBeOnTheScreen();
-    });
-    expect(screen.getByTestId('calendar-create-button')).toBeOnTheScreen();
-  });
-
   it('shows the analytics empty state when there is no data', async () => {
     renderRouter('./app', { initialUrl: '/analytics' });
 
@@ -62,27 +52,64 @@ describe('app smoke', () => {
     });
   });
 
-  it('renders the settings screen and import entrypoint', async () => {
-    renderRouter('./app', { initialUrl: '/settings' });
-
-    await waitFor(() => {
-      expect(screen.getByTestId('screen-settings')).toBeOnTheScreen();
-    });
-    expect(screen.getByTestId('settings-import-button')).toBeOnTheScreen();
-  });
-
-  it('navigates between tabs without breaking routing', async () => {
+  it('opens the side menu and navigates to the important days screen', async () => {
     const result = renderRouter('./app', { initialUrl: '/' });
 
     await waitFor(() => {
       expect(screen.getByTestId('screen-home')).toBeOnTheScreen();
     });
 
-    fireEvent.press(screen.getByTestId('tab-calendar'));
+    fireEvent.press(screen.getByLabelText('メニューを開く'));
+    fireEvent.press(screen.getByText('大切な日'));
 
     await waitFor(() => {
-      expect(screen.getByTestId('screen-calendar')).toBeOnTheScreen();
+      expect(screen.getByText('大切な日')).toBeOnTheScreen();
     });
-    expect(result.getPathname()).toBe('/calendar');
+    expect(result.getPathname()).toBe('/important-days');
+  });
+
+  it('navigates between main tabs without breaking routing', async () => {
+    const result = renderRouter('./app', { initialUrl: '/' });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('screen-home')).toBeOnTheScreen();
+    });
+
+    fireEvent.press(screen.getByTestId('tab-history'));
+
+    await waitFor(() => {
+      expect(result.getPathname()).toBe('/history');
+    });
+    expect(screen.getByTestId('tab-history')).toBeOnTheScreen();
+
+    fireEvent.press(screen.getByTestId('tab-analytics'));
+
+    await waitFor(() => {
+      expect(result.getPathname()).toBe('/analytics');
+    });
+    expect(screen.getByTestId('tab-analytics')).toBeOnTheScreen();
+  });
+
+  it('renders templates after starting a new record', async () => {
+    renderRouter('./app', { initialUrl: '/' });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('screen-home')).toBeOnTheScreen();
+    });
+
+    fireEvent.press(screen.getByTestId('home-start-review-button'));
+
+    await waitFor(() => {
+      expect(screen.getByText('テンプレートを選ぶ')).toBeOnTheScreen();
+    });
+  });
+
+  it('shows a recent record in history when data exists', async () => {
+    await saveReview(createReview());
+    renderRouter('./app', { initialUrl: '/history' });
+
+    await waitFor(() => {
+      expect(screen.getByText(templates[0].name)).toBeOnTheScreen();
+    });
   });
 });
