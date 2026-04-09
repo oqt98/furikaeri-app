@@ -21,6 +21,7 @@ import {
   type ImportantDay,
   type ImportantDayType,
 } from '../lib/importantDays';
+import { getImportantDayMarker } from '../lib/importantDayIcons';
 import { useAppTheme } from '../lib/theme-context';
 import { createCardShadow } from '../lib/theme';
 
@@ -292,7 +293,10 @@ export default function ImportantDaysScreen() {
           <View key={item.id} style={styles.itemCard}>
             <View style={styles.itemHeader}>
               <View style={styles.itemText}>
-                <Text style={styles.itemName}>{item.name}</Text>
+                <View style={styles.itemNameRow}>
+                  <Text style={styles.itemMarker}>{getImportantDayMarker(item)}</Text>
+                  <Text style={styles.itemName}>{item.name}</Text>
+                </View>
                 <Text style={styles.itemMeta}>
                   {item.type} ・ {item.date} ・ {formatImportantDayCountdown(item.date, item.isRecurringAnnual)}
                 </Text>
@@ -567,10 +571,18 @@ function createStyles(theme: ReturnType<typeof useAppTheme>['theme']) {
     itemText: {
       flex: 1,
     },
+    itemNameRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: theme.spacing.sm,
+      marginBottom: 4,
+    },
+    itemMarker: {
+      fontSize: 18,
+    },
     itemName: {
       ...theme.typography.section,
       color: theme.colors.text,
-      marginBottom: 4,
     },
     itemMeta: {
       ...theme.typography.body,

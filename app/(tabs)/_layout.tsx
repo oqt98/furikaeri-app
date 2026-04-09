@@ -1,7 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
-import { Tabs } from 'expo-router';
+import { Tabs, usePathname } from 'expo-router';
 import type { ComponentProps } from 'react';
 import { View } from 'react-native';
+import { confirmEntryLeave } from '../../lib/entryNavigationGuard';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAppTheme } from '../../lib/theme-context';
 
@@ -37,6 +38,7 @@ function TabIcon({
 export default function TabsLayout() {
   const { theme } = useAppTheme();
   const insets = useSafeAreaInsets();
+  const pathname = usePathname();
 
   return (
     <Tabs
@@ -58,6 +60,17 @@ export default function TabsLayout() {
           marginBottom: 2,
         },
       }}
+      screenListeners={({ navigation, route }) => ({
+        tabPress: (event) => {
+          if (pathname !== '/entry') return;
+
+          event.preventDefault();
+          void confirmEntryLeave().then((shouldLeave) => {
+            if (!shouldLeave) return;
+            navigation.navigate(route.name as never);
+          });
+        },
+      })}
     >
       <Tabs.Screen
         name="index"

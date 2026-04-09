@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useFocusEffect, useRouter } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
 import {
   Alert,
@@ -11,22 +11,23 @@ import {
   View,
 } from 'react-native';
 import type { TagDefinition, TagType } from '../../data/tags';
-import { createTag, getTagCatalog, setTagArchived } from '../../lib/storage';
+import { createTag, deleteTag, getTagCatalog, reorderTags } from '../../lib/storage';
 import { useAppTheme } from '../../lib/theme-context';
 import { createCardShadow } from '../../lib/theme';
 
 type SectionProps = {
   title: string;
   tags: TagDefinition[];
-  archivedTags: TagDefinition[];
   value: string;
   onChange: (value: string) => void;
   onCreate: () => void;
-  onToggleArchive: (tagId: string, nextArchived: boolean) => void;
+  onMove: (tagId: string, direction: 'up' | 'down') => void;
+  onDelete: (tag: TagDefinition) => void;
 };
 
 export default function TagsScreen() {
   const router = useRouter();
+  const { returnTo } = useLocalSearchParams<{ returnTo?: string }>();
   const { theme } = useAppTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
   const [actionValue, setActionValue] = useState('');
@@ -36,8 +37,8 @@ export default function TagsScreen() {
 
   const load = useCallback(() => {
     void getTagCatalog().then((catalog) => {
-      setActionTags(catalog.action);
-      setStateTags(catalog.state);
+      setActionTags(catalog.action.filter((tag) => !tag.isArchived));
+      setStateTags(catalog.state.filter((tag) => !tag.isArchived));
     });
   }, []);
 
@@ -63,9 +64,36 @@ export default function TagsScreen() {
     load();
   };
 
-  const handleToggleArchive = async (tagId: string, nextArchived: boolean) => {
-    await setTagArchived(tagId, nextArchived);
-    load();
+  const handleMove = async (type: TagType, tagId: string, direction: 'up' | 'down') => {
+    const source = type === 'action' ? actionTags : stateTags;
+    const index = source.findIndex((tag) => tag.id === tagId);
+    const targetIndex = direction === 'up' ? index - 1 : index + 1;
+    if (index < 0 || targetIndex < 0 || targetIndex >= source.length) return;
+
+    const next = [...source];
+    const [moved] = next.splice(index, 1);
+    next.splice(targetIndex, 0, moved);
+
+    if (type === 'action') {
+      setActionTags(next);
+    } else {
+      setStateTags(next);
+    }
+
+    await reorderTags(type, next.map((tag) => tag.id));
+  };
+
+  const handleDelete = (tag: TagDefinition) => {
+    Alert.alert('タグを削除しますか？', `「${tag.label}」を削除します。`, [
+      { text: 'キャンセル', style: 'cancel' },
+      {
+        text: '削除する',
+        style: 'destructive',
+        onPress: () => {
+          void deleteTag(tag.id).then(load);
+        },
+      },
+    ]);
   };
 
   return (
@@ -77,38 +105,44 @@ export default function TagsScreen() {
         <View style={styles.headerText}>
           <Text style={styles.title}>タグ管理</Text>
           <Text style={styles.subtitle}>
-            行動タグと状態タグを整理できます。記録に戻っても入力途中の内容はそのまま残ります。
+            並び順は保存され、作成画面にもすぐ反映されます。
           </Text>
         </View>
       </View>
 
       <TagSection
         title="行動タグ"
-        tags={actionTags.filter((tag) => !tag.isArchived)}
-        archivedTags={actionTags.filter((tag) => tag.isArchived)}
+        tags={actionTags}
         value={actionValue}
         onChange={setActionValue}
         onCreate={() => {
           void handleCreate('action', actionValue);
         }}
-        onToggleArchive={(tagId, nextArchived) => {
-          void handleToggleArchive(tagId, nextArchived);
+        onMove={(tagId, direction) => {
+          void handleMove('action', tagId, direction);
         }}
+        onDelete={handleDelete}
       />
 
       <TagSection
-        title="状態タグ"
-        tags={stateTags.filter((tag) => !tag.isArchived)}
-        archivedTags={stateTags.filter((tag) => tag.isArchived)}
+        title="気分タグ"
+        tags={stateTags}
         value={stateValue}
         onChange={setStateValue}
         onCreate={() => {
           void handleCreate('state', stateValue);
         }}
-        onToggleArchive={(tagId, nextArchived) => {
-          void handleToggleArchive(tagId, nextArchived);
+        onMove={(tagId, direction) => {
+          void handleMove('state', tagId, direction);
         }}
+        onDelete={handleDelete}
       />
+
+      {returnTo === 'entry' ? (
+        <Pressable style={styles.returnButton} onPress={() => router.back()}>
+          <Text style={styles.returnButtonText}>作成画面に戻る</Text>
+        </Pressable>
+      ) : null}
     </ScrollView>
   );
 }
@@ -116,11 +150,11 @@ export default function TagsScreen() {
 function TagSection({
   title,
   tags,
-  archivedTags,
   value,
   onChange,
   onCreate,
-  onToggleArchive,
+  onMove,
+  onDelete,
 }: SectionProps) {
   const { theme } = useAppTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
@@ -141,37 +175,46 @@ function TagSection({
         </Pressable>
       </View>
 
-      <Text style={styles.groupLabel}>使用中</Text>
       <View style={styles.tagList}>
         {tags.length === 0 ? (
-          <Text style={styles.emptyText}>まだタグはありません。</Text>
+          <Text style={styles.emptyText}>タグはまだありません。</Text>
         ) : (
-          tags.map((tag) => (
+          tags.map((tag, index) => (
             <View key={tag.id} style={styles.tagRow}>
               <Text style={styles.tagText}>{tag.label}</Text>
-              <Pressable onPress={() => onToggleArchive(tag.id, true)}>
-                <Text style={styles.archiveText}>非表示にする</Text>
-              </Pressable>
+              <View style={styles.actions}>
+                <Pressable
+                  style={styles.iconButton}
+                  onPress={() => onMove(tag.id, 'up')}
+                  disabled={index === 0}
+                >
+                  <Ionicons
+                    name="chevron-up"
+                    size={16}
+                    color={index === 0 ? theme.colors.textSoft : theme.colors.primaryDark}
+                  />
+                </Pressable>
+                <Pressable
+                  style={styles.iconButton}
+                  onPress={() => onMove(tag.id, 'down')}
+                  disabled={index === tags.length - 1}
+                >
+                  <Ionicons
+                    name="chevron-down"
+                    size={16}
+                    color={
+                      index === tags.length - 1 ? theme.colors.textSoft : theme.colors.primaryDark
+                    }
+                  />
+                </Pressable>
+                <Pressable style={styles.deleteButton} onPress={() => onDelete(tag)}>
+                  <Text style={styles.deleteText}>削除</Text>
+                </Pressable>
+              </View>
             </View>
           ))
         )}
       </View>
-
-      {archivedTags.length > 0 ? (
-        <>
-          <Text style={styles.groupLabel}>非表示</Text>
-          <View style={styles.tagList}>
-            {archivedTags.map((tag) => (
-              <View key={tag.id} style={styles.tagRow}>
-                <Text style={styles.tagText}>{tag.label}</Text>
-                <Pressable onPress={() => onToggleArchive(tag.id, false)}>
-                  <Text style={styles.restoreText}>戻す</Text>
-                </Pressable>
-              </View>
-            ))}
-          </View>
-        </>
-      ) : null}
     </View>
   );
 }
@@ -250,11 +293,6 @@ function createStyles(theme: ReturnType<typeof useAppTheme>['theme']) {
       ...theme.typography.caption,
       color: theme.colors.white,
     },
-    groupLabel: {
-      ...theme.typography.caption,
-      color: theme.colors.textSoft,
-      marginBottom: theme.spacing.sm,
-    },
     tagList: {
       gap: theme.spacing.sm,
     },
@@ -264,26 +302,54 @@ function createStyles(theme: ReturnType<typeof useAppTheme>['theme']) {
     },
     tagRow: {
       flexDirection: 'row',
-      justifyContent: 'space-between',
       alignItems: 'center',
       backgroundColor: theme.colors.surfaceMuted,
       borderRadius: theme.radius.lg,
       paddingHorizontal: theme.spacing.lg,
       paddingVertical: 12,
+      gap: theme.spacing.sm,
     },
     tagText: {
       ...theme.typography.body,
       color: theme.colors.text,
       flex: 1,
-      paddingRight: theme.spacing.md,
     },
-    archiveText: {
+    actions: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: theme.spacing.xs,
+    },
+    iconButton: {
+      width: 32,
+      height: 32,
+      borderRadius: theme.radius.pill,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: theme.colors.surface,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+    },
+    deleteButton: {
+      backgroundColor: theme.colors.dangerSoft,
+      borderRadius: theme.radius.lg,
+      paddingHorizontal: theme.spacing.md,
+      paddingVertical: 8,
+    },
+    deleteText: {
       ...theme.typography.caption,
       color: theme.colors.danger,
     },
-    restoreText: {
-      ...theme.typography.caption,
-      color: theme.colors.primaryDark,
+    returnButton: {
+      backgroundColor: theme.colors.primary,
+      borderRadius: theme.radius.xl,
+      alignItems: 'center',
+      paddingVertical: 16,
+      marginTop: theme.spacing.sm,
+    },
+    returnButtonText: {
+      ...theme.typography.body,
+      color: theme.colors.white,
+      fontWeight: '700',
     },
   });
 }

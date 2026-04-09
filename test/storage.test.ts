@@ -1,11 +1,12 @@
 import asyncStorage from './async-storage-mock.cjs';
 import {
-  DuplicateReviewDateError,
   createTag,
+  deleteTag,
   getReviews,
   getTagCatalog,
   getTemplateOrder,
   importReviews,
+  reorderTags,
   saveReview,
 } from '../lib/storage';
 import { CATEGORIES } from '../data/reviewOptions';
@@ -64,7 +65,7 @@ describe('lib/storage', () => {
     expect(reviews[0].isFavorite).toBe(false);
   });
 
-  it('saveReview stores a normalized record and rejects another review on the same date', async () => {
+  it('saveReview stores normalized records and keeps multiple entries for the same date', async () => {
     await saveReview(
       createReview({
         actionTagIds: ['action-reading', 'action-reading'],
@@ -85,16 +86,16 @@ describe('lib/storage', () => {
       { id: 'photo-2', order: 1 },
     ]);
 
-    await expect(
-      saveReview(
-        createReview({
-          id: 'review-2',
-          createdAt: '2026-04-06T22:30:00',
-        })
-      )
-    ).rejects.toMatchObject<DuplicateReviewDateError>({
-      existingReviewId: 'review-1',
-    });
+    await saveReview(
+      createReview({
+        id: 'review-2',
+        createdAt: '2026-04-06T22:30:00',
+      })
+    );
+
+    const nextSaved = await getReviews();
+    expect(nextSaved).toHaveLength(2);
+    expect(nextSaved.map((item) => item.id)).toEqual(['review-2', 'review-1']);
   });
 
   it('importReviews imports valid rows, skips invalid duplicates, and creates missing tags', async () => {
@@ -209,5 +210,26 @@ describe('lib/storage', () => {
     expect(tagCatalog.action.find((tag) => tag.id === 'action-custom')?.isArchived).toBe(
       false
     );
+  });
+
+  it('reorderTags persists the custom order and deleteTag removes tag references from reviews', async () => {
+    await reorderTags('action', ['action-study', 'action-reading']);
+
+    let tagCatalog = await getTagCatalog();
+    expect(tagCatalog.action[0].id).toBe('action-study');
+
+    await saveReview(
+      createReview({
+        actionTagIds: ['action-reading', 'action-study'],
+      })
+    );
+
+    await deleteTag('action-reading');
+
+    const reviews = await getReviews();
+    expect(reviews[0].actionTagIds).toEqual(['action-study']);
+
+    tagCatalog = await getTagCatalog();
+    expect(tagCatalog.action.find((tag) => tag.id === 'action-reading')).toBeFalsy();
   });
 });

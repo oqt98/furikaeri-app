@@ -6,6 +6,8 @@ export const MOOD_OPTIONS = [
   { value: 5, emoji: '😄', label: 'かなりよかった' },
 ] as const;
 
+export const MOOD_DISPLAY_OPTIONS = [...MOOD_OPTIONS].sort((a, b) => b.value - a.value);
+
 export const MOOD_VALUES = MOOD_OPTIONS.map((item) => item.value) as [1, 2, 3, 4, 5];
 
 export const CATEGORIES = ['仕事', 'プライベート'] as const;

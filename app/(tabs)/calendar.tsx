@@ -17,6 +17,7 @@ import {
   getImportantDaysForDateKey,
   type ImportantDay,
 } from '../../lib/importantDays';
+import { getImportantDayMarker } from '../../lib/importantDayIcons';
 import {
   deleteReview,
   getReviews,
@@ -164,6 +165,17 @@ export default function CalendarScreen() {
           </View>
 
           <Pressable
+            style={styles.todayButton}
+            onPress={() => {
+              const today = new Date();
+              setCurrentMonth(new Date(today.getFullYear(), today.getMonth(), 1));
+              setSelectedDateKey(toDateKey(today));
+            }}
+          >
+            <Text style={styles.todayButtonText}>今日</Text>
+          </Pressable>
+
+          <Pressable
             style={styles.monthButton}
             onPress={() =>
               setCurrentMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1))
@@ -175,9 +187,9 @@ export default function CalendarScreen() {
 
         <View style={styles.calendarCard}>
           <View style={styles.weekRow}>
-            {WEEK_LABELS.map((label) => (
+            {WEEK_LABELS.map((label, index) => (
               <View key={label} style={styles.weekCell}>
-                <Text style={styles.weekLabel}>{label}</Text>
+                <Text style={[styles.weekLabel, index === 0 && styles.sundayText, index === 6 && styles.saturdayText]}>{label}</Text>
               </View>
             ))}
           </View>
@@ -189,6 +201,9 @@ export default function CalendarScreen() {
               const count = dayReviews.length;
               const hasFavorite = dayReviews.some((item) => item.isFavorite);
               const hasImportantDay = dayImportantDays.length > 0;
+              const importantDayMarker = hasImportantDay
+                ? getImportantDayMarker(dayImportantDays[0])
+                : null;
               const selected = cell.dateKey === selectedDateKey;
               const today = cell.dateKey === toDateKey(new Date());
 
@@ -200,6 +215,7 @@ export default function CalendarScreen() {
                     styles.dayCell,
                     getHeatStyle(count, theme.name),
                     selected && styles.dayCellSelected,
+                    today && styles.todayCell,
                     hasFavorite && !selected && styles.favoriteDayCell,
                     !cell.isCurrentMonth && styles.dayCellOutside,
                   ]}
@@ -222,22 +238,21 @@ export default function CalendarScreen() {
                     />
                   ) : null}
 
-                  {hasImportantDay ? (
-                    <View
-                      testID={`calendar-important-day-marker-${cell.dateKey}`}
-                      style={[
-                        styles.importantDayDot,
-                        selected && styles.importantDayDotSelected,
-                      ]}
-                    />
+                  {hasImportantDay && importantDayMarker ? (
+                    <View testID={`calendar-important-day-marker-${cell.dateKey}`} style={styles.importantDayMarker}>
+                      <Text style={[styles.importantDayMarkerText, selected && styles.importantDayMarkerTextSelected]}>
+                        {importantDayMarker}
+                      </Text>
+                    </View>
                   ) : null}
 
                   <Text
                     style={[
                       styles.dayText,
+                      cell.date.getDay() === 0 && styles.sundayText,
+                      cell.date.getDay() === 6 && styles.saturdayText,
                       selected && styles.dayTextSelected,
                       !cell.isCurrentMonth && styles.dayTextOutside,
-                      today && !selected && styles.dayTextToday,
                     ]}
                   >
                     {cell.day}
@@ -269,7 +284,7 @@ export default function CalendarScreen() {
             {selectedImportantDays.map((item) => (
               <View key={item.id} style={styles.importantDayRow}>
                 <View style={styles.importantDayBadge}>
-                  <Ionicons name="sparkles-outline" size={14} color={theme.colors.warning} />
+                  <Text style={styles.importantDayBadgeMarker}>{getImportantDayMarker(item)}</Text>
                   <Text style={styles.importantDayBadgeText}>{item.type}</Text>
                 </View>
                 <Text
@@ -483,6 +498,17 @@ export function createCalendarStyles(theme = getTheme('light')) {
       justifyContent: 'center',
       backgroundColor: theme.colors.primarySoft,
     },
+    todayButton: {
+      backgroundColor: theme.colors.primarySoft,
+      borderRadius: theme.radius.pill,
+      paddingHorizontal: theme.spacing.md,
+      paddingVertical: 10,
+      marginHorizontal: theme.spacing.sm,
+    },
+    todayButtonText: {
+      ...theme.typography.caption,
+      color: theme.colors.primaryDark,
+    },
     monthHeaderText: {
       alignItems: 'center',
       flexShrink: 1,
@@ -534,21 +560,25 @@ export function createCalendarStyles(theme = getTheme('light')) {
     dayCellSelected: {
       backgroundColor: theme.colors.primary,
     },
+    todayCell: {
+      borderWidth: 2,
+      borderColor: theme.colors.primaryDark,
+      backgroundColor: theme.colors.primarySoft,
+    },
     favoriteDayCell: {
       borderWidth: 2,
       borderColor: theme.colors.danger,
     },
-    importantDayDot: {
+    importantDayMarker: {
       position: 'absolute',
-      top: 6,
-      left: 6,
-      width: 8,
-      height: 8,
-      borderRadius: theme.radius.pill,
-      backgroundColor: theme.colors.warning,
+      top: 5,
+      left: 5,
     },
-    importantDayDotSelected: {
-      backgroundColor: theme.colors.white,
+    importantDayMarkerText: {
+      fontSize: 10,
+    },
+    importantDayMarkerTextSelected: {
+      color: theme.colors.white,
     },
     favoriteDayIcon: {
       position: 'absolute',
@@ -569,8 +599,11 @@ export function createCalendarStyles(theme = getTheme('light')) {
     dayTextOutside: {
       color: theme.colors.textSoft,
     },
-    dayTextToday: {
-      textDecorationLine: 'underline',
+    sundayText: {
+      color: theme.colors.danger,
+    },
+    saturdayText: {
+      color: '#3b82f6',
     },
     dayCount: {
       fontSize: 10,
@@ -641,6 +674,9 @@ export function createCalendarStyles(theme = getTheme('light')) {
     importantDayBadgeText: {
       ...theme.typography.caption,
       color: theme.colors.textMuted,
+    },
+    importantDayBadgeMarker: {
+      fontSize: 14,
     },
     importantDayText: {
       ...theme.typography.body,

@@ -27,6 +27,12 @@ export default function TemplatesScreen() {
     });
   };
 
+  const handleSelectRandom = () => {
+    if (items.length === 0) return;
+    const picked = items[Math.floor(Math.random() * items.length)];
+    handleSelectTemplate(picked.id);
+  };
+
   return (
     <ScrollView contentContainerStyle={styles.container}>
       <BackHeader
@@ -40,6 +46,14 @@ export default function TemplatesScreen() {
           <Text style={styles.quickBody}>迷ったら最初のテンプレートから始められます。</Text>
         </View>
         <Ionicons name="flash-outline" size={20} color={theme.colors.primaryDark} />
+      </Pressable>
+
+      <Pressable style={styles.quickCard} onPress={handleSelectRandom}>
+        <View style={styles.quickText}>
+          <Text style={styles.quickTitle}>ランダム</Text>
+          <Text style={styles.quickBody}>使えるテンプレから1つをランダムで選びます。</Text>
+        </View>
+        <Ionicons name="shuffle-outline" size={20} color={theme.colors.primaryDark} />
       </Pressable>
 
       {items.map((item) => (

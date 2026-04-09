@@ -11,6 +11,7 @@ import {
   getImportantDays,
   type ImportantDay,
 } from '../../lib/importantDays';
+import { getImportantDayMarker } from '../../lib/importantDayIcons';
 import { buildInsightSummary } from '../../lib/insights';
 import { getReviews, type ReviewItem } from '../../lib/storage';
 import { useAppTheme } from '../../lib/theme-context';
@@ -95,7 +96,10 @@ export default function RecordHomeScreen() {
             <Text style={styles.cardLabel}>次に近い大切な日</Text>
             {nextImportantDay ? (
               <>
-                <Text style={styles.cardTitle}>{nextImportantDay.name}</Text>
+                <View style={styles.importantDayTitleRow}>
+                  <Text style={styles.importantDayMarker}>{getImportantDayMarker(nextImportantDay)}</Text>
+                  <Text style={styles.cardTitle}>{nextImportantDay.name}</Text>
+                </View>
                 <Text style={styles.cardBody}>
                   {nextImportantDay.type} ・ {formatImportantDayCountdown(nextImportantDay.date)}
                 </Text>
@@ -233,6 +237,15 @@ function createStyles(theme: ReturnType<typeof useAppTheme>['theme']) {
       ...theme.typography.section,
       color: theme.colors.text,
       marginBottom: 6,
+    },
+    importantDayTitleRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: theme.spacing.sm,
+      marginBottom: 6,
+    },
+    importantDayMarker: {
+      fontSize: 18,
     },
     cardBody: {
       ...theme.typography.body,

@@ -11,10 +11,12 @@ import {
   type TagType,
 } from '../data/tags';
 import { templates } from '../data/templates';
+import { toDateKey } from './reviewDate';
 
 const STORAGE_KEY = 'furikaeri-history';
 const TEMPLATE_ORDER_KEY = 'furikaeri-template-order';
 const TAG_CATALOG_KEY = 'furikaeri-tag-catalog';
+const TAG_DELETED_DEFAULTS_KEY = 'furikaeri-tag-deleted-defaults';
 
 export type { TagDefinition } from '../data/tags';
 
@@ -135,42 +137,18 @@ export async function getReviewByDateKey(
 
 export async function saveReview(item: ReviewItem): Promise<void> {
   const current = await getReviews();
-  const existing = current.find(
-    (review) =>
-      toDateKey(new Date(review.createdAt)) === toDateKey(new Date(item.createdAt))
-  );
-
-  if (existing) {
-    throw new DuplicateReviewDateError(
-      'A review for this date already exists.',
-      existing.id
-    );
-  }
-
-  const next = [normalizeReviewForSave(item), ...current];
-  await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+  const next = [normalizeReviewForSave(item), ...current.filter((review) => review.id !== item.id)];
+  await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(next.sort(sortReviewsByCreatedAtDesc)));
 }
 
 export async function updateReview(updatedItem: ReviewItem): Promise<void> {
   const current = await getReviews();
-  const existing = current.find(
-    (item) =>
-      item.id !== updatedItem.id &&
-      toDateKey(new Date(item.createdAt)) ===
-        toDateKey(new Date(updatedItem.createdAt))
-  );
-
-  if (existing) {
-    throw new DuplicateReviewDateError(
-      'A review for this date already exists.',
-      existing.id
-    );
-  }
-
-  const next = current.map((item) =>
-    item.id === updatedItem.id ? normalizeReviewForSave(updatedItem) : item
-  );
-  await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+  const normalized = normalizeReviewForSave(updatedItem);
+  const hasExisting = current.some((item) => item.id === updatedItem.id);
+  const next = hasExisting
+    ? current.map((item) => (item.id === updatedItem.id ? normalized : item))
+    : [normalized, ...current];
+  await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(next.sort(sortReviewsByCreatedAtDesc)));
 }
 
 export async function deleteReview(id: string): Promise<void> {
@@ -364,13 +342,17 @@ export async function saveTemplateOrder(order: string[]): Promise<void> {
 
 export async function getTagCatalog(): Promise<TagCatalog> {
   try {
-    const raw = await AsyncStorage.getItem(TAG_CATALOG_KEY);
+    const [raw, deletedRaw] = await Promise.all([
+      AsyncStorage.getItem(TAG_CATALOG_KEY),
+      AsyncStorage.getItem(TAG_DELETED_DEFAULTS_KEY),
+    ]);
+    const deletedIds = new Set<string>(deletedRaw ? (JSON.parse(deletedRaw) as string[]) : []);
     if (!raw) return cloneDefaultTagCatalog();
 
     const parsed = JSON.parse(raw) as Partial<TagCatalog>;
     return {
-      action: mergeTagDefinitions(parsed.action, DEFAULT_TAGS.action),
-      state: mergeTagDefinitions(parsed.state, DEFAULT_TAGS.state),
+      action: mergeTagDefinitions(parsed.action, DEFAULT_TAGS.action, deletedIds),
+      state: mergeTagDefinitions(parsed.state, DEFAULT_TAGS.state, deletedIds),
     };
   } catch (error) {
     console.error('getTagCatalog error:', error);
@@ -409,9 +391,51 @@ export async function createTag(
     isArchived: false,
     createdAt: new Date().toISOString(),
   };
-  catalog[type] = [nextTag, ...catalog[type]];
+  catalog[type] = [...catalog[type], nextTag];
   await saveTagCatalog(catalog);
   return nextTag;
+}
+
+export async function deleteTag(tagId: string): Promise<void> {
+  const catalog = await getTagCatalog();
+  const deletedDefaultIds = await loadDeletedDefaultTagIds();
+  const nextCatalog: TagCatalog = {
+    action: catalog.action.filter((item) => item.id !== tagId),
+    state: catalog.state.filter((item) => item.id !== tagId),
+  };
+
+  const reviews = await getReviews();
+  const nextReviews = reviews.map((item) => ({
+    ...item,
+    actionTagIds: item.actionTagIds.filter((id) => id !== tagId),
+    stateTagIds: item.stateTagIds.filter((id) => id !== tagId),
+  }));
+
+  const isDefaultTag = [...DEFAULT_TAGS.action, ...DEFAULT_TAGS.state].some((item) => item.id === tagId);
+  const nextDeletedDefaultIds = isDefaultTag
+    ? Array.from(new Set([...deletedDefaultIds, tagId]))
+    : deletedDefaultIds;
+
+  await Promise.all([
+    saveTagCatalog(nextCatalog),
+    AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(nextReviews.sort(sortReviewsByCreatedAtDesc))),
+    AsyncStorage.setItem(TAG_DELETED_DEFAULTS_KEY, JSON.stringify(nextDeletedDefaultIds)),
+  ]);
+}
+
+export async function reorderTags(type: TagType, orderedIds: string[]): Promise<void> {
+  const catalog = await getTagCatalog();
+  const current = catalog[type];
+  const orderMap = new Map(orderedIds.map((id, index) => [id, index]));
+
+  catalog[type] = [...current].sort((a, b) => {
+    const indexA = orderMap.get(a.id) ?? Number.MAX_SAFE_INTEGER;
+    const indexB = orderMap.get(b.id) ?? Number.MAX_SAFE_INTEGER;
+    if (indexA !== indexB) return indexA - indexB;
+    return (a.createdAt ?? '').localeCompare(b.createdAt ?? '');
+  });
+
+  await saveTagCatalog(catalog);
 }
 
 export async function setTagArchived(
@@ -568,15 +592,30 @@ function cloneDefaultTagCatalog(): TagCatalog {
 
 function mergeTagDefinitions(
   current: TagDefinition[] | undefined,
-  defaults: TagDefinition[]
+  defaults: TagDefinition[],
+  deletedIds: Set<string>
 ): TagDefinition[] {
-  const map = new Map<string, TagDefinition>();
-  defaults.forEach((item) => map.set(item.id, { ...item, isArchived: false }));
-  (current ?? []).forEach((item) => {
-    if (!item?.id || !item?.label) return;
-    map.set(item.id, { ...item });
+  const currentItems = (current ?? []).filter((item) => item?.id && item?.label);
+  const seen = new Set(currentItems.map((item) => item.id));
+  const merged = currentItems.map((item) => ({ ...item }));
+
+  defaults.forEach((item) => {
+    if (!seen.has(item.id) && !deletedIds.has(item.id)) {
+      merged.push({ ...item, isArchived: false });
+    }
   });
-  return [...map.values()];
+
+  return merged;
+}
+
+async function loadDeletedDefaultTagIds() {
+  try {
+    const raw = await AsyncStorage.getItem(TAG_DELETED_DEFAULTS_KEY);
+    return raw ? (JSON.parse(raw) as string[]) : [];
+  } catch (error) {
+    console.error('loadDeletedDefaultTagIds error:', error);
+    return [];
+  }
 }
 
 function buildLegacyTagLookup(catalog: TagCatalog) {
@@ -591,11 +630,4 @@ function dedupe(values: string[]) {
 
 function sortReviewsByCreatedAtDesc(a: ReviewItem, b: ReviewItem) {
   return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-}
-
-function toDateKey(date: Date) {
-  const year = date.getFullYear();
-  const month = `${date.getMonth() + 1}`.padStart(2, '0');
-  const day = `${date.getDate()}`.padStart(2, '0');
-  return `${year}-${month}-${day}`;
 }
