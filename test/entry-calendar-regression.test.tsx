@@ -15,7 +15,7 @@ beforeEach(async () => {
 });
 
 describe('entry and calendar regressions', () => {
-  it('shows the memo field only for the memo template', () => {
+  it('keeps one-line memo available while filtering template-only answers', () => {
     expect(shouldShowMemoField('memo')).toBe(true);
     expect(shouldShowMemoField('kpt')).toBe(false);
     expect(getVisibleTemplateFields('memo')).toHaveLength(0);
@@ -30,19 +30,22 @@ describe('entry and calendar regressions', () => {
         'kpt'
       )
     ).toEqual({
+      memo: 'hidden',
       keep: 'keep',
       problem: 'problem',
     });
   });
 
-  it('does not render the memo field after selecting a non-memo template', async () => {
+  it('renders the quick memo field and keeps template questions collapsed initially', async () => {
     renderRouter('./app', { initialUrl: '/entry?templateId=kpt' });
 
     await waitFor(() => {
-      expect(screen.getByText('KPT')).toBeOnTheScreen();
+      expect(screen.getByTestId('entry-memo-input')).toBeOnTheScreen();
     });
 
-    expect(screen.queryByText('ひとことメモ')).toBeNull();
+    expect(screen.getByText('ひとこと')).toBeOnTheScreen();
+    expect(screen.getByText('KPTで詳しく振り返る')).toBeOnTheScreen();
+    expect(screen.queryByText('Keep')).toBeNull();
   });
 
   it('uses theme-specific calendar styles', () => {

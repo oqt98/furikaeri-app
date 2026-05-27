@@ -61,8 +61,8 @@
 
 ## 最短ルート
 
-1. `settings.tsx` の型エラーを直す
-2. `npm run test`, `npm run typecheck`, `npm run lint` を通す
+1. `npm run test`, `npm run typecheck`, `npm run lint` を通す
+2. Supabase 実環境で記録、写真、タグ、AI 要約を確認する
 3. Android 実機で主要導線を確認する
 4. `eas build -p android --profile production` を一度通す
 5. ストア用素材と説明文をそろえる

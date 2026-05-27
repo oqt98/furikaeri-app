@@ -2,7 +2,6 @@ import asyncStorage from './async-storage-mock.cjs';
 import {
   createTag,
   deleteTag,
-  DuplicateReviewDateError,
   getReviews,
   getTagCatalog,
   getTemplateOrder,
@@ -68,7 +67,7 @@ describe('lib/storage', () => {
     expect(reviews[0].isFavorite).toBe(false);
   });
 
-  it('saveReview stores normalized records and blocks duplicate dates', async () => {
+  it('saveReview stores normalized records and allows multiple records per day', async () => {
     await saveReview(
       createReview({
         actionTagIds: ['action-reading', 'action-reading'],
@@ -89,26 +88,19 @@ describe('lib/storage', () => {
       { id: 'photo-2', order: 1 },
     ]);
 
-    let duplicateError: unknown = null;
-    try {
-      await saveReview(
-        createReview({
-          id: 'review-2',
-          createdAt: '2026-04-06T22:30:00',
-        })
-      );
-    } catch (error) {
-      duplicateError = error;
-    }
-
-    expect(duplicateError instanceof DuplicateReviewDateError).toBe(true);
+    await saveReview(
+      createReview({
+        id: 'review-2',
+        createdAt: '2026-04-06T22:30:00',
+      })
+    );
 
     const nextSaved = await getReviews();
-    expect(nextSaved).toHaveLength(1);
-    expect(nextSaved.map((item) => item.id)).toEqual(['review-1']);
+    expect(nextSaved).toHaveLength(2);
+    expect(nextSaved.map((item) => item.id)).toEqual(['review-2', 'review-1']);
   });
 
-  it('importReviews imports valid rows, skips invalid duplicates, and creates missing tags', async () => {
+  it('importReviews imports valid rows, skips invalid duplicate fingerprints, and creates missing tags', async () => {
     await asyncStorage.setItem(
       'furikaeri-tag-catalog',
       JSON.stringify({
@@ -156,10 +148,10 @@ describe('lib/storage', () => {
         sourceRowNumber: 3,
         createdAt: '2026-04-01T19:00:00',
         category: CATEGORIES[0],
-        templateName: 'duplicate-existing',
+        templateName: 'same-day-existing',
         answers: {},
         importSource: 'notion-import',
-        importFingerprint: 'fp-existing',
+        importFingerprint: 'fp-same-day',
       },
       {
         sourceRowNumber: 4,
@@ -172,11 +164,11 @@ describe('lib/storage', () => {
       },
     ]);
 
-    expect(result.importedCount).toBe(1);
-    expect(result.skipped.map((item) => item.sourceRowNumber)).toEqual([2, 3, 4]);
+    expect(result.importedCount).toBe(2);
+    expect(result.skipped.map((item) => item.sourceRowNumber)).toEqual([2, 4]);
 
     const reviews = await getReviews();
-    expect(reviews).toHaveLength(2);
+    expect(reviews).toHaveLength(3);
     expect(reviews[0].templateName).toBe('CSV取り込み');
     expect(reviews[0].actionTagIds).toHaveLength(2);
     expect(reviews[0].stateTagIds).toHaveLength(1);

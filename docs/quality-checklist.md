@@ -9,7 +9,7 @@
 - `npm run lint`
 
 注意:
-- 現在は `app/(tabs)/settings.tsx` に既存の型エラーがあるため、`typecheck` は先にそこを直す必要があります
+- `typecheck` は通る状態を維持する
 
 ## 機能確認
 
@@ -53,6 +53,6 @@
 
 ## 未対応・要注意
 
-- `settings.tsx` の型エラー解消
+- smoke test の安定化
 - Supabase 実環境での end-to-end 確認
 - Android 実機でのネットワーク不安定時確認

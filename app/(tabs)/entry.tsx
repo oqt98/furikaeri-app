@@ -15,7 +15,7 @@ import { preparePhotoForUpload } from '../../lib/photoProcessing';
 import { buildCalendarCells, formatDateLabel, isValidDateKey, mergeDateWithTime, toDateKey } from '../../lib/reviewDate';
 import { reviewRepository, ReviewSyncError } from '../../lib/reviewRepository';
 import { tagRepository } from '../../lib/tagRepository';
-import { DuplicateReviewDateError, type ReviewItem, type ReviewPhoto } from '../../lib/storage';
+import type { ReviewItem, ReviewPhoto } from '../../lib/storage';
 import { useAppTheme } from '../../lib/theme-context';
 import { createCardShadow } from '../../lib/theme';
 
@@ -41,7 +41,7 @@ type Snapshot = {
 export default function EntryScreen() {
   const navigation = useNavigation();
   const { templateId, reviewId, date } = useLocalSearchParams<{ templateId?: string; reviewId?: string; date?: string }>();
-  const { theme, t } = useAppTheme();
+  const { theme } = useAppTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
   const isEditMode = Boolean(reviewId);
   const draftKey = isEditMode ? `edit:${reviewId}` : 'new';
@@ -65,12 +65,15 @@ export default function EntryScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [isDraftReady, setIsDraftReady] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isRecordDetailsOpen, setIsRecordDetailsOpen] = useState(false);
+  const [isTagsOpen, setIsTagsOpen] = useState(false);
+  const [isTemplateQuestionsOpen, setIsTemplateQuestionsOpen] = useState(false);
+  const [isPhotosOpen, setIsPhotosOpen] = useState(false);
   const initialSnapshotRef = useRef('');
   const skipLeaveGuardRef = useRef(false);
 
   const selectedTemplate = templates.find((item) => item.id === selectedTemplateId) ?? templates[0];
   const visibleTemplateFields = getVisibleTemplateFields(selectedTemplate.id);
-  const showMemoField = shouldShowMemoField(selectedTemplate.id);
   const currentSnapshot = useMemo(() => JSON.stringify({ templateId: selectedTemplateId, selectedDateKey, category, mood, answers, actionTagIds, stateTagIds, photos } satisfies Snapshot), [selectedTemplateId, selectedDateKey, category, mood, answers, actionTagIds, stateTagIds, photos]);
   const hasUnsavedChanges = !isLoading && isDraftReady && currentSnapshot !== initialSnapshotRef.current;
   const calendarCells = useMemo(() => buildCalendarCells(calendarMonth), [calendarMonth]);
@@ -257,10 +260,6 @@ export default function EntryScreen() {
       router.replace('/(tabs)/history');
     } catch (error) {
       console.error(error);
-      if (error instanceof DuplicateReviewDateError) {
-        Alert.alert(t('entry.duplicateDateTitle'), t('entry.duplicateDateBody'));
-        return;
-      }
       if (error instanceof ReviewSyncError) {
         Alert.alert('クラウド同期に失敗しました', `${error.message}\n\n端末側の内容は保持されています。通信状況を確認して、あとでもう一度お試しください。`);
         return;
@@ -278,44 +277,6 @@ export default function EntryScreen() {
   return (
     <ScrollView contentContainerStyle={styles.container}>
       <BackHeader title={isEditMode ? '記録を編集' : '記録を作成'} subtitle="無理なく振り返れる形で、今日の記録を残しましょう。" />
-      <View style={styles.templateCard}>
-        <View style={styles.rowTop}>
-          <View style={styles.flexFill}>
-            <Text style={styles.sectionLabel}>テンプレート</Text>
-            <Text style={styles.sectionTitle}>{selectedTemplate.name}</Text>
-            <Text style={styles.helperText}>{selectedTemplate.description}</Text>
-          </View>
-          <Pressable style={styles.secondaryButton} onPress={handleOpenTemplatePicker}><Text style={styles.secondaryButtonText}>選び直す</Text></Pressable>
-        </View>
-      </View>
-
-      <View style={styles.sectionCard}>
-        <Text style={styles.sectionLabel}>日付</Text>
-        <TextInput style={[styles.input, dateError ? styles.inputError : null]} value={dateInputValue} onChangeText={handleDateInputChange} onBlur={handleDateInputBlur} placeholder="2026-04-07" placeholderTextColor={theme.colors.textSoft} autoCapitalize="none" />
-        {dateError ? <Text style={styles.errorText}>{dateError}</Text> : null}
-        <Text style={styles.helperText}>テキスト入力でもカレンダー選択でも同じ日付に反映されます。</Text>
-        <Pressable style={styles.calendarToggleButton} onPress={() => setIsCalendarOpen((prev) => !prev)}>
-          <Ionicons name="calendar-outline" size={18} color={theme.colors.primaryDark} />
-          <Text style={styles.calendarToggleText}>{isCalendarOpen ? 'カレンダーを閉じる' : 'カレンダーを開く'}</Text>
-        </Pressable>
-        {isCalendarOpen ? (
-          <>
-            <View style={styles.calendarHeader}><Pressable style={styles.iconAction} onPress={() => setCalendarMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))}><Ionicons name="chevron-back" size={16} color={theme.colors.primaryDark} /></Pressable><Text style={styles.calendarTitle}>{formatDateLabel(toDateKey(calendarMonth)).slice(0, -2)}</Text><Pressable style={styles.iconAction} onPress={() => setCalendarMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1))}><Ionicons name="chevron-forward" size={16} color={theme.colors.primaryDark} /></Pressable></View>
-            <View style={styles.calendarGrid}>
-              {WEEK_LABELS.map((label, index) => <Text key={label} style={[styles.weekLabel, index === 0 && styles.sundayText, index === 6 && styles.saturdayText]}>{label}</Text>)}
-              {calendarCells.map((cell) => {
-                const isToday = cell.dateKey === toDateKey(new Date());
-                const weekday = cell.date.getDay();
-                return (
-                  <Pressable key={cell.dateKey} style={[styles.calendarCell, cell.dateKey === selectedDateKey && styles.calendarCellActive, isToday && styles.todayCell, !cell.isCurrentMonth && styles.calendarCellOutside]} onPress={() => handleSelectCalendarDate(cell.dateKey)}>
-                    <Text style={[styles.calendarCellText, weekday === 0 && styles.sundayText, weekday === 6 && styles.saturdayText, cell.dateKey === selectedDateKey && styles.calendarCellTextActive]}>{cell.day}</Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-          </>
-        ) : null}
-      </View>
 
       <ChoiceSection title="気分" styles={styles}>
         <View style={styles.choiceWrap}>
@@ -331,27 +292,75 @@ export default function EntryScreen() {
         </View>
       </ChoiceSection>
 
-      <ChoiceSection title="カテゴリ" styles={styles}>
-        <View style={styles.choiceWrap}>
-          {CATEGORIES.map((item) => {
-            const active = category === item;
-            return <Pressable key={item} style={[styles.choiceChip, active && styles.choiceChipActive]} onPress={() => setCategory(item)}><Text style={[styles.choiceChipText, active && styles.choiceChipTextActive]}>{item}</Text></Pressable>;
-          })}
-        </View>
-      </ChoiceSection>
+      <View style={styles.sectionCard}>
+        <Text style={styles.sectionLabel}>ひとこと</Text>
+        <TextInput testID="entry-memo-input" style={styles.memoInput} multiline textAlignVertical="top" placeholder="今日のひとことを自由に書いてください" placeholderTextColor={theme.colors.textSoft} value={answers[MEMO_FIELD_KEY] ?? ''} onChangeText={(text) => setAnswers((prev) => ({ ...prev, [MEMO_FIELD_KEY]: text }))} />
+      </View>
 
-      <TagChoiceSection title="行動タグ" manageLabel="管理" tags={tagCatalog.action.filter((tag) => !tag.isArchived)} selectedIds={actionTagIds} onPressManage={handleOpenTags} onToggle={(tagId) => setActionTagIds((prev) => prev.includes(tagId) ? prev.filter((item) => item !== tagId) : [...prev, tagId])} />
-      <TagChoiceSection title="気分タグ" manageLabel="管理" tags={tagCatalog.state.filter((tag) => !tag.isArchived)} selectedIds={stateTagIds} onPressManage={handleOpenTags} onToggle={(tagId) => setStateTagIds((prev) => prev.includes(tagId) ? prev.filter((item) => item !== tagId) : [...prev, tagId])} />
-
-      {showMemoField ? (
-        <View style={styles.sectionCard}>
-          <Text style={styles.sectionLabel}>ひとことメモ</Text>
-          <TextInput testID="entry-memo-input" style={styles.memoInput} multiline textAlignVertical="top" placeholder="今日のひとことを自由に書いてください" placeholderTextColor={theme.colors.textSoft} value={answers[MEMO_FIELD_KEY] ?? ''} onChangeText={(text) => setAnswers((prev) => ({ ...prev, [MEMO_FIELD_KEY]: text }))} />
+      <DisclosureSection
+        title="記録の設定"
+        summary={`${selectedDateKey} ・ ${category} ・ ${selectedTemplate.name}`}
+        isOpen={isRecordDetailsOpen}
+        onToggle={() => setIsRecordDetailsOpen((value) => !value)}
+        styles={styles}
+      >
+        <View style={styles.innerBlock}>
+          <View style={styles.rowTop}>
+            <View style={styles.flexFill}>
+              <Text style={styles.sectionLabel}>テンプレート</Text>
+              <Text style={styles.sectionTitle}>{selectedTemplate.name}</Text>
+              <Text style={styles.helperText}>{selectedTemplate.description}</Text>
+            </View>
+            <Pressable style={styles.secondaryButton} onPress={handleOpenTemplatePicker}><Text style={styles.secondaryButtonText}>選び直す</Text></Pressable>
+          </View>
         </View>
-      ) : null}
+
+        <View style={styles.innerBlock}>
+          <Text style={styles.sectionLabel}>日付</Text>
+          <TextInput style={[styles.input, dateError ? styles.inputError : null]} value={dateInputValue} onChangeText={handleDateInputChange} onBlur={handleDateInputBlur} placeholder="2026-04-07" placeholderTextColor={theme.colors.textSoft} autoCapitalize="none" />
+          {dateError ? <Text style={styles.errorText}>{dateError}</Text> : null}
+          <Text style={styles.helperText}>同じ日付にも複数の記録を保存できます。</Text>
+          <Pressable style={styles.calendarToggleButton} onPress={() => setIsCalendarOpen((prev) => !prev)}>
+            <Ionicons name="calendar-outline" size={18} color={theme.colors.primaryDark} />
+            <Text style={styles.calendarToggleText}>{isCalendarOpen ? 'カレンダーを閉じる' : 'カレンダーを開く'}</Text>
+          </Pressable>
+          {isCalendarOpen ? (
+            <>
+              <View style={styles.calendarHeader}><Pressable style={styles.iconAction} onPress={() => setCalendarMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))}><Ionicons name="chevron-back" size={16} color={theme.colors.primaryDark} /></Pressable><Text style={styles.calendarTitle}>{formatDateLabel(toDateKey(calendarMonth)).slice(0, -2)}</Text><Pressable style={styles.iconAction} onPress={() => setCalendarMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1))}><Ionicons name="chevron-forward" size={16} color={theme.colors.primaryDark} /></Pressable></View>
+              <View style={styles.calendarGrid}>
+                {WEEK_LABELS.map((label, index) => <Text key={label} style={[styles.weekLabel, index === 0 && styles.sundayText, index === 6 && styles.saturdayText]}>{label}</Text>)}
+                {calendarCells.map((cell) => {
+                  const isToday = cell.dateKey === toDateKey(new Date());
+                  const weekday = cell.date.getDay();
+                  return (
+                    <Pressable key={cell.dateKey} style={[styles.calendarCell, cell.dateKey === selectedDateKey && styles.calendarCellActive, isToday && styles.todayCell, !cell.isCurrentMonth && styles.calendarCellOutside]} onPress={() => handleSelectCalendarDate(cell.dateKey)}>
+                      <Text style={[styles.calendarCellText, weekday === 0 && styles.sundayText, weekday === 6 && styles.saturdayText, cell.dateKey === selectedDateKey && styles.calendarCellTextActive]}>{cell.day}</Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </>
+          ) : null}
+        </View>
+
+        <View style={styles.innerBlock}>
+          <Text style={styles.sectionLabel}>カテゴリ</Text>
+          <View style={styles.choiceWrap}>
+            {CATEGORIES.map((item) => {
+              const active = category === item;
+              return <Pressable key={item} style={[styles.choiceChip, active && styles.choiceChipActive]} onPress={() => setCategory(item)}><Text style={[styles.choiceChipText, active && styles.choiceChipTextActive]}>{item}</Text></Pressable>;
+            })}
+          </View>
+        </View>
+      </DisclosureSection>
+
+      <DisclosureSection title="タグ" summary="行動や気分を後から探しやすくします" isOpen={isTagsOpen} onToggle={() => setIsTagsOpen((value) => !value)} styles={styles}>
+        <TagChoiceSection title="行動タグ" manageLabel="管理" tags={tagCatalog.action.filter((tag) => !tag.isArchived)} selectedIds={actionTagIds} onPressManage={handleOpenTags} onToggle={(tagId) => setActionTagIds((prev) => prev.includes(tagId) ? prev.filter((item) => item !== tagId) : [...prev, tagId])} />
+        <TagChoiceSection title="気分タグ" manageLabel="管理" tags={tagCatalog.state.filter((tag) => !tag.isArchived)} selectedIds={stateTagIds} onPressManage={handleOpenTags} onToggle={(tagId) => setStateTagIds((prev) => prev.includes(tagId) ? prev.filter((item) => item !== tagId) : [...prev, tagId])} />
+      </DisclosureSection>
 
       {visibleTemplateFields.length > 0 ? (
-        <View style={styles.sectionCard}>
+        <DisclosureSection title="テンプレ質問" summary={`${selectedTemplate.name}で詳しく振り返る`} isOpen={isTemplateQuestionsOpen} onToggle={() => setIsTemplateQuestionsOpen((value) => !value)} styles={styles}>
           <Text style={styles.sectionLabel}>テンプレ質問</Text>
           <Text style={styles.sectionTitle}>{selectedTemplate.name}の記録</Text>
           {visibleTemplateFields.map((field) => (
@@ -360,10 +369,10 @@ export default function EntryScreen() {
               <TextInput style={[styles.input, field.multiline !== false && styles.multiInput]} multiline={field.multiline !== false} textAlignVertical="top" placeholder={`${field.label}を入力`} placeholderTextColor={theme.colors.textSoft} value={answers[field.key] ?? ''} onChangeText={(text) => setAnswers((prev) => ({ ...prev, [field.key]: text }))} />
             </View>
           ))}
-        </View>
+        </DisclosureSection>
       ) : null}
 
-      <View style={styles.sectionCard}>
+      <DisclosureSection title="写真" summary={photos.length === 0 ? '必要なときだけ追加できます' : `${photos.length}枚`} isOpen={isPhotosOpen} onToggle={() => setIsPhotosOpen((value) => !value)} styles={styles}>
         <View style={styles.rowTop}>
           <View style={styles.flexFill}>
             <Text style={styles.sectionLabel}>写真</Text>
@@ -378,7 +387,7 @@ export default function EntryScreen() {
             <TextInput style={styles.input} value={photo.comment} onChangeText={(text) => setPhotos((prev) => prev.map((item) => item.id === photo.id ? { ...item, comment: text } : item))} placeholder="写真メモ" placeholderTextColor={theme.colors.textSoft} />
           </View>
         ))}
-      </View>
+      </DisclosureSection>
 
       <Pressable
         style={[styles.saveButton, isSaving && styles.saveButtonDisabled]}
@@ -397,11 +406,31 @@ function ChoiceSection({ title, children, styles }: { title: string; children: R
   return <View style={styles.sectionCard}><Text style={styles.sectionLabel}>{title}</Text>{children}</View>;
 }
 
+function DisclosureSection({ title, summary, isOpen, onToggle, children, styles }: { title: string; summary: string; isOpen: boolean; onToggle: () => void; children: ReactNode; styles: ReturnType<typeof createStyles> }) {
+  const { theme } = useAppTheme();
+  return (
+    <View style={styles.sectionCard}>
+      <Pressable style={styles.disclosureHeader} onPress={onToggle}>
+        <View style={styles.flexFill}>
+          <Text style={styles.sectionLabel}>{title}</Text>
+          <Text style={styles.helperText}>{summary}</Text>
+        </View>
+        <Ionicons
+          name={isOpen ? 'chevron-up' : 'chevron-down'}
+          size={18}
+          color={theme.colors.primaryDark}
+        />
+      </Pressable>
+      {isOpen ? <View style={styles.disclosureBody}>{children}</View> : null}
+    </View>
+  );
+}
+
 function TagChoiceSection({ title, manageLabel, tags, selectedIds, onToggle, onPressManage }: { title: string; manageLabel: string; tags: TagDefinition[]; selectedIds: string[]; onToggle: (tagId: string) => void; onPressManage: () => void }) {
   const { theme } = useAppTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
   return (
-    <View style={styles.sectionCard}>
+    <View style={styles.innerBlock}>
       <View style={styles.rowTop}><Text style={styles.sectionLabel}>{title}</Text><Pressable onPress={onPressManage}><Text style={styles.manageLink}>{manageLabel}</Text></Pressable></View>
       <View style={styles.choiceWrap}>
         {tags.map((tag) => {
@@ -425,7 +454,7 @@ export function getVisibleTemplateFields(templateId: string) {
 
 export function getAnswersForSave(currentAnswers: Record<string, string>, templateId: string) {
   const allowedKeys = new Set(getVisibleTemplateFields(templateId).map((field) => field.key));
-  if (shouldShowMemoField(templateId)) allowedKeys.add(MEMO_FIELD_KEY);
+  allowedKeys.add(MEMO_FIELD_KEY);
   return Object.fromEntries(Object.entries(currentAnswers).filter(([key, value]) => allowedKeys.has(key) && typeof value === 'string'));
 }
 
@@ -448,8 +477,10 @@ function createStyles(theme: ReturnType<typeof useAppTheme>['theme']) {
     loadingContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: theme.colors.background },
     loadingText: { ...theme.typography.body, color: theme.colors.textMuted },
     flexFill: { flex: 1 },
-    templateCard: { ...createCardShadow(theme), backgroundColor: theme.colors.primarySoft, borderRadius: theme.radius.xl, borderWidth: 1, borderColor: theme.colors.border, padding: theme.spacing.xl, marginBottom: theme.spacing.md },
     sectionCard: { ...createCardShadow(theme), backgroundColor: theme.colors.surface, borderRadius: theme.radius.xl, borderWidth: 1, borderColor: theme.colors.border, padding: theme.spacing.xl, marginBottom: theme.spacing.md },
+    innerBlock: { marginBottom: theme.spacing.md },
+    disclosureHeader: { flexDirection: 'row', alignItems: 'center', gap: theme.spacing.md },
+    disclosureBody: { marginTop: theme.spacing.lg },
     rowTop: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: theme.spacing.md, marginBottom: theme.spacing.sm },
     sectionLabel: { ...theme.typography.caption, color: theme.colors.textSoft, marginBottom: theme.spacing.sm },
     sectionTitle: { ...theme.typography.section, color: theme.colors.text, marginBottom: theme.spacing.sm },

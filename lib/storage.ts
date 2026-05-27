@@ -25,16 +25,6 @@ const TAG_DELETED_DEFAULTS_KEY = 'furikaeri-tag-deleted-defaults';
 
 export type { TagDefinition } from '../data/tags';
 
-export class DuplicateReviewDateError extends Error {
-  existingReviewId?: string;
-
-  constructor(message: string, existingReviewId?: string) {
-    super(message);
-    this.name = 'DuplicateReviewDateError';
-    this.existingReviewId = existingReviewId;
-  }
-}
-
 export type ReviewPhoto = {
   id: string;
   uri: string;
@@ -142,31 +132,12 @@ export async function getReviewByDateKey(
 }
 
 export async function saveReview(item: ReviewItem): Promise<void> {
-  const existingOnSameDate = await getReviewByDateKey(toDateKey(new Date(item.createdAt)), item.id);
-  if (existingOnSameDate) {
-    throw new DuplicateReviewDateError(
-      '同じ日付の記録は1件までです。',
-      existingOnSameDate.id
-    );
-  }
-
   const current = await getReviews();
   const next = [normalizeReviewForSave(item), ...current.filter((review) => review.id !== item.id)];
   await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(next.sort(sortReviewsByCreatedAtDesc)));
 }
 
 export async function updateReview(updatedItem: ReviewItem): Promise<void> {
-  const existingOnSameDate = await getReviewByDateKey(
-    toDateKey(new Date(updatedItem.createdAt)),
-    updatedItem.id
-  );
-  if (existingOnSameDate) {
-    throw new DuplicateReviewDateError(
-      '同じ日付の記録は1件までです。',
-      existingOnSameDate.id
-    );
-  }
-
   const current = await getReviews();
   const normalized = normalizeReviewForSave(updatedItem);
   const hasExisting = current.some((item) => item.id === updatedItem.id);
@@ -273,29 +244,6 @@ export async function importReviews(
       skipped.push({
         sourceRowNumber: draft.sourceRowNumber,
         reason: 'CSV 内で同じデータが重複しているためスキップしました。',
-      });
-      return;
-    }
-
-    const duplicateByDateInCurrent = current.find(
-      (item) => toDateKey(new Date(item.createdAt)) === toDateKey(createdAt)
-    );
-    if (duplicateByDateInCurrent) {
-      skipped.push({
-        sourceRowNumber: draft.sourceRowNumber,
-        reason: '同じ日付の記録がすでにあります。',
-        existingReviewId: duplicateByDateInCurrent.id,
-      });
-      return;
-    }
-
-    const duplicateByDateInDraft = accepted.find(
-      (item) => toDateKey(new Date(item.createdAt)) === toDateKey(createdAt)
-    );
-    if (duplicateByDateInDraft) {
-      skipped.push({
-        sourceRowNumber: draft.sourceRowNumber,
-        reason: 'CSV 内で同じ日付の行が重複しています。',
       });
       return;
     }

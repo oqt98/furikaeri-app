@@ -105,6 +105,7 @@
 - [DB / RLS メモ](./docs/db-rls-phase1.md)
 - [品質確認チェックリスト](./docs/quality-checklist.md)
 - [Android 公開準備チェックリスト](./docs/android-release-checklist.md)
+- [公開前の実行計画](./docs/release-execution-plan.md)
 
 ## セットアップ
 
