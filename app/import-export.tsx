@@ -3,7 +3,8 @@ import { useMemo, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import BackHeader from '../components/BackHeader';
 import { parseNotionCsv } from '../lib/notionImport';
-import { getReviews, importReviews } from '../lib/storage';
+import { reviewRepository } from '../lib/reviewRepository';
+import { importReviews } from '../lib/storage';
 import { useAppTheme } from '../lib/theme-context';
 import { createCardShadow } from '../lib/theme';
 
@@ -41,7 +42,7 @@ export default function ImportExportScreen() {
     try {
       setIsExporting(true);
       const directory = await Directory.pickDirectoryAsync();
-      const reviews = await getReviews();
+      const reviews = await reviewRepository.list();
       const fileName = `furikaeri-export-${new Date().toISOString().slice(0, 10)}.json`;
       const exportFile = new File(directory.uri, fileName);
       exportFile.create({ overwrite: true, intermediates: true });

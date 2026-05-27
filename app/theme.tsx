@@ -6,15 +6,12 @@ import { useAppTheme } from '../lib/theme-context';
 import { createCardShadow, themeOptions } from '../lib/theme';
 
 export default function ThemeScreen() {
-  const { theme, themeName, setThemeName } = useAppTheme();
+  const { theme, themeName, setThemeName, t } = useAppTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
-      <BackHeader
-        title="テーマ"
-        subtitle="読みやすさを保ちながら、気分に合わせて色を選べます。"
-      />
+      <BackHeader title={t('theme.title')} subtitle={t('theme.subtitle')} />
 
       {themeOptions.map((option) => {
         const selected = option.name === themeName;
@@ -27,8 +24,8 @@ export default function ThemeScreen() {
             }}
           >
             <View style={styles.optionText}>
-              <Text style={styles.optionTitle}>{option.label}</Text>
-              <Text style={styles.optionBody}>{option.description}</Text>
+              <Text style={styles.optionTitle}>{t(`theme.${option.name}.label`)}</Text>
+              <Text style={styles.optionBody}>{t(`theme.${option.name}.description`)}</Text>
             </View>
             {selected ? (
               <Ionicons

@@ -11,7 +11,7 @@ import {
   View,
 } from 'react-native';
 import type { TagDefinition, TagType } from '../../data/tags';
-import { createTag, deleteTag, getTagCatalog, reorderTags } from '../../lib/storage';
+import { tagRepository } from '../../lib/tagRepository';
 import { useAppTheme } from '../../lib/theme-context';
 import { createCardShadow } from '../../lib/theme';
 
@@ -36,7 +36,7 @@ export default function TagsScreen() {
   const [stateTags, setStateTags] = useState<TagDefinition[]>([]);
 
   const load = useCallback(() => {
-    void getTagCatalog().then((catalog) => {
+    void tagRepository.getCatalog().then((catalog) => {
       setActionTags(catalog.action.filter((tag) => !tag.isArchived));
       setStateTags(catalog.state.filter((tag) => !tag.isArchived));
     });
@@ -49,7 +49,7 @@ export default function TagsScreen() {
   );
 
   const handleCreate = async (type: TagType, value: string) => {
-    const created = await createTag(type, value);
+    const created = await tagRepository.create(type, value);
     if (!created) {
       Alert.alert('タグ名を入力してください');
       return;
@@ -80,7 +80,7 @@ export default function TagsScreen() {
       setStateTags(next);
     }
 
-    await reorderTags(type, next.map((tag) => tag.id));
+    await tagRepository.reorder(type, next.map((tag) => tag.id));
   };
 
   const handleDelete = (tag: TagDefinition) => {
@@ -90,7 +90,7 @@ export default function TagsScreen() {
         text: '削除する',
         style: 'destructive',
         onPress: () => {
-          void deleteTag(tag.id).then(load);
+          void tagRepository.remove(tag.id).then(load);
         },
       },
     ]);

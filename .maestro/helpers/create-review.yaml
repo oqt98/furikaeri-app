@@ -1,0 +1,21 @@
+- launchApp:
+    clearState: true
+
+- tapOn:
+    id: home-start-review-button
+
+- tapOn:
+    id: template-card-diary
+
+- tapOn:
+    id: field-title
+
+- inputText: "Maestro E2E review"
+
+- tapOn:
+    id: entry-save-button
+
+- assertVisible:
+    id: screen-history
+
+- assertVisible: "Maestro E2E review"

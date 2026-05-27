@@ -1,11 +1,7 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { File } from 'expo-file-system';
-import * as Notifications from 'expo-notifications';
 import { useFocusEffect, useRouter } from 'expo-router';
-import { useCallback, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import {
   Alert,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -14,32 +10,18 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import SettingsImportSection from '../../components/SettingsImportSection';
 import SwipeTabPage from '../../components/SwipeTabPage';
-import { parseNotionCsv } from '../../lib/notionImport';
-import { clearAllReviews, importReviews } from '../../lib/storage';
+import {
+  cancelExistingReminderIfAny as syncCancelExistingReminderIfAny,
+  configureReminderNotifications,
+  ensureNotificationPermission as syncEnsureNotificationPermission,
+  loadReminderSettings as loadSyncedReminderSettings,
+  saveReminderSettings as saveSyncedReminderSettings,
+  scheduleDailyReminder as syncScheduleDailyReminder,
+} from '../../lib/reminderSettings';
+import { clearAllReviews } from '../../lib/storage';
 import { brand, cardShadow, theme } from '../../lib/theme';
-
-const REMINDER_ENABLED_KEY = 'furikaeri-reminder-enabled';
-const REMINDER_HOUR_KEY = 'furikaeri-reminder-hour';
-const REMINDER_MINUTE_KEY = 'furikaeri-reminder-minute';
-const REMINDER_NOTIFICATION_ID_KEY = 'furikaeri-reminder-notification-id';
-
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowBanner: true,
-    shouldShowList: true,
-    shouldPlaySound: false,
-    shouldSetBadge: false,
-  }),
-});
-
-type ImportSummary = {
-  readCount: number;
-  addedCount: number;
-  skippedCount: number;
-  errorCount: number;
-  details: { rowNumber: number; reason: string }[];
-};
 
 export default function SettingsScreen() {
   const router = useRouter();
@@ -50,11 +32,14 @@ export default function SettingsScreen() {
   const [hourInput, setHourInput] = useState('22');
   const [minuteInput, setMinuteInput] = useState('00');
   const [isSavingReminder, setIsSavingReminder] = useState(false);
-  const [isImportingCsv, setIsImportingCsv] = useState(false);
+
+  useEffect(() => {
+    void configureReminderNotifications();
+  }, []);
 
   useFocusEffect(
     useCallback(() => {
-      void loadReminderSettings().then(({ enabled, hour, minute }) => {
+      void loadSyncedReminderSettings().then(({ enabled, hour, minute }) => {
         setReminderEnabled(enabled);
         setReminderHour(hour);
         setReminderMinute(minute);
@@ -82,21 +67,25 @@ export default function SettingsScreen() {
       setIsSavingReminder(true);
 
       if (nextValue) {
-        const granted = await ensureNotificationPermission();
+        const granted = await syncEnsureNotificationPermission();
         if (!granted) {
-          Alert.alert('通知権限がありません', '設定から通知を許可してください。');
+          Alert.alert(
+            '通知を有効にできません',
+            '端末の設定から通知を許可してください。'
+          );
           return;
         }
-        await scheduleDailyReminder(reminderHour, reminderMinute);
+
+        await syncScheduleDailyReminder(reminderHour, reminderMinute);
       } else {
-        await cancelExistingReminderIfAny();
+        await syncCancelExistingReminderIfAny();
       }
 
-      await saveReminderSettings(nextValue, reminderHour, reminderMinute);
+      await saveSyncedReminderSettings(nextValue, reminderHour, reminderMinute);
       setReminderEnabled(nextValue);
     } catch (error) {
       console.error(error);
-      Alert.alert('リマインド設定の更新に失敗しました');
+      Alert.alert('リマインダー設定の更新に失敗しました');
     } finally {
       setIsSavingReminder(false);
     }
@@ -105,14 +94,14 @@ export default function SettingsScreen() {
   const applyReminderTime = async (hour: number, minute: number) => {
     try {
       setIsSavingReminder(true);
-      await saveReminderSettings(reminderEnabled, hour, minute);
+      await saveSyncedReminderSettings(reminderEnabled, hour, minute);
       setReminderHour(hour);
       setReminderMinute(minute);
       setHourInput(String(hour).padStart(2, '0'));
       setMinuteInput(String(minute).padStart(2, '0'));
 
       if (reminderEnabled) {
-        await scheduleDailyReminder(hour, minute);
+        await syncScheduleDailyReminder(hour, minute);
       }
     } catch (error) {
       console.error(error);
@@ -134,52 +123,14 @@ export default function SettingsScreen() {
       minute <= 59;
 
     if (!valid) {
-      Alert.alert('時刻の形式が正しくありません', '0-23 / 0-59 で入力してください。');
+      Alert.alert(
+        '時刻の形式が正しくありません',
+        '0-23 / 0-59 の範囲で入力してください。'
+      );
       return;
     }
 
     void applyReminderTime(hour, minute);
-  };
-
-  const handleImportCsv = async () => {
-    try {
-      setIsImportingCsv(true);
-      const selected = await File.pickFileAsync(undefined, 'text/*');
-      const pickedFile = Array.isArray(selected) ? selected[0] : selected;
-      const csvText = await pickedFile.text();
-      const parsed = parseNotionCsv(csvText);
-      const imported = await importReviews(parsed.drafts);
-      const summary: ImportSummary = {
-        readCount: parsed.readCount,
-        addedCount: imported.importedCount,
-        skippedCount: imported.skipped.length,
-        errorCount: parsed.issues.length,
-        details: parsed.issues
-          .concat(
-            imported.skipped.map((item) => ({
-              rowNumber: item.sourceRowNumber ?? 0,
-              reason: item.reason,
-            }))
-          )
-          .slice(0, 6),
-      };
-
-      Alert.alert(
-        summary.readCount === 0
-          ? 'Notion CSV を取り込めませんでした'
-          : 'Notion CSV を取り込みました',
-        buildImportResultMessage(summary)
-      );
-    } catch (error) {
-      if (isCancelledFilePick(error)) {
-        return;
-      }
-
-      console.error(error);
-      Alert.alert('Notion CSV の取り込みに失敗しました');
-    } finally {
-      setIsImportingCsv(false);
-    }
   };
 
   return (
@@ -187,42 +138,29 @@ export default function SettingsScreen() {
       <ScrollView contentContainerStyle={styles.container}>
         <Text style={styles.title}>設定</Text>
         <Text style={styles.subtitle}>
-          リマインド、タグ管理、Notion CSV インポート、データ削除をここで行えます。
+          リマインダー、タグ管理、CSV取り込み、データ削除をここで調整できます。
         </Text>
 
         <View style={styles.brandCard}>
           <Text style={styles.brandName}>{brand.name}</Text>
           <Text style={styles.brandSubtitle}>{brand.subtitle}</Text>
           <Text style={styles.brandText}>
-            軽く振り返って、あとから見返しやすくするための設定をまとめています。
+            入力のしやすさを保ちながら、続けやすい振り返り環境を整えるための設定です。
           </Text>
         </View>
 
         <SectionCard title="Notion CSV Import">
-          <Text style={styles.sectionBody}>
-            Notion の `タイトル / 今日の気分 / 日付` を既存レビューへ取り込みます。完全重複はスキップし、同じ日付でも別タイトルなら別レコードとして追加します。
-          </Text>
-          <Pressable
-            style={[styles.linkButton, isImportingCsv && styles.disabledButton]}
-            onPress={() => {
-              void handleImportCsv();
-            }}
-            disabled={isImportingCsv}
-          >
-            <Text style={styles.linkButtonText}>
-              {isImportingCsv ? 'CSV を読み込み中...' : 'Notion CSV を取り込む'}
-            </Text>
-          </Pressable>
+          <SettingsImportSection />
         </SectionCard>
 
-        <SectionCard title="リマインド">
+        <SectionCard title="リマインダー">
           <Text style={styles.sectionBody}>
-            1 日 1 回、指定した時刻に振り返りの通知を送ります。
+            1日1回、記録を思い出すための通知を設定できます。
           </Text>
 
           <View style={styles.toggleRow}>
             <View style={styles.flexFill}>
-              <Text style={styles.toggleTitle}>毎日のリマインド</Text>
+              <Text style={styles.toggleTitle}>毎日のリマインダー</Text>
               <Text style={styles.toggleSubtitle}>
                 {reminderEnabled
                   ? `${formatTime(reminderHour, reminderMinute)} に通知`
@@ -302,7 +240,7 @@ export default function SettingsScreen() {
 
         <SectionCard title="タグ管理">
           <Text style={styles.sectionBody}>
-            行動タグと状態タグの追加・非表示を設定できます。
+            行動タグと気分タグの追加・編集・表示設定を変更できます。
           </Text>
           <Pressable style={styles.linkButton} onPress={() => router.push('./tags')}>
             <Text style={styles.linkButtonText}>タグを管理する</Text>
@@ -311,7 +249,7 @@ export default function SettingsScreen() {
 
         <SectionCard title="データ削除">
           <Text style={styles.sectionBody}>
-            保存済みのレビューをすべて削除します。この操作は元に戻せません。
+            端末内の記録をすべて削除します。この操作は元に戻せません。
           </Text>
           <Pressable
             style={[styles.dangerButton, isClearing && styles.disabledButton]}
@@ -397,111 +335,8 @@ function TimeAdjuster({
   );
 }
 
-async function loadReminderSettings() {
-  try {
-    const [enabledRaw, hourRaw, minuteRaw] = await Promise.all([
-      AsyncStorage.getItem(REMINDER_ENABLED_KEY),
-      AsyncStorage.getItem(REMINDER_HOUR_KEY),
-      AsyncStorage.getItem(REMINDER_MINUTE_KEY),
-    ]);
-
-    return {
-      enabled: enabledRaw === 'true',
-      hour: hourRaw ? Number(hourRaw) : 22,
-      minute: minuteRaw ? Number(minuteRaw) : 0,
-    };
-  } catch (error) {
-    console.error(error);
-    return { enabled: false, hour: 22, minute: 0 };
-  }
-}
-
-async function saveReminderSettings(enabled: boolean, hour: number, minute: number) {
-  await Promise.all([
-    AsyncStorage.setItem(REMINDER_ENABLED_KEY, String(enabled)),
-    AsyncStorage.setItem(REMINDER_HOUR_KEY, String(hour)),
-    AsyncStorage.setItem(REMINDER_MINUTE_KEY, String(minute)),
-  ]);
-}
-
-async function ensureNotificationPermission() {
-  if (Platform.OS === 'android') {
-    await Notifications.setNotificationChannelAsync('daily-reminder', {
-      name: 'Furikaeri Reminder',
-      importance: Notifications.AndroidImportance.DEFAULT,
-    });
-  }
-
-  const current = await Notifications.getPermissionsAsync();
-  if (current.granted) return true;
-
-  const requested = await Notifications.requestPermissionsAsync({
-    ios: {
-      allowAlert: true,
-      allowBadge: true,
-      allowSound: true,
-    },
-  });
-
-  return requested.granted;
-}
-
-async function cancelExistingReminderIfAny() {
-  const existingId = await AsyncStorage.getItem(REMINDER_NOTIFICATION_ID_KEY);
-  if (existingId) {
-    try {
-      await Notifications.cancelScheduledNotificationAsync(existingId);
-    } catch (error) {
-      console.error(error);
-    }
-  }
-  await AsyncStorage.removeItem(REMINDER_NOTIFICATION_ID_KEY);
-}
-
-async function scheduleDailyReminder(hour: number, minute: number) {
-  await cancelExistingReminderIfAny();
-
-  const notificationId = await Notifications.scheduleNotificationAsync({
-    content: {
-      title: 'ふりかえりの時間です',
-      body: '今日のことを短く残しておきましょう。',
-    },
-    trigger: {
-      type: Notifications.SchedulableTriggerInputTypes.DAILY,
-      hour,
-      minute,
-      ...(Platform.OS === 'android' ? { channelId: 'daily-reminder' } : {}),
-    },
-  });
-
-  await AsyncStorage.setItem(REMINDER_NOTIFICATION_ID_KEY, notificationId);
-}
-
 function formatTime(hour: number, minute: number) {
   return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
-}
-
-function isCancelledFilePick(error: unknown) {
-  return error instanceof Error && /cancel/i.test(error.message);
-}
-
-function buildImportResultMessage(summary: ImportSummary) {
-  const detailLines = summary.details
-    .map((item) =>
-      item.rowNumber > 0 ? `${item.rowNumber} 行目: ${item.reason}` : item.reason
-    )
-    .slice(0, 6);
-
-  return [
-    `読み込み件数: ${summary.readCount}件`,
-    `追加件数: ${summary.addedCount}件`,
-    `スキップ件数: ${summary.skippedCount}件`,
-    `エラー件数: ${summary.errorCount}件`,
-    detailLines.length > 0 ? '' : null,
-    ...detailLines,
-  ]
-    .filter(Boolean)
-    .join('\n');
 }
 
 const styles = StyleSheet.create({

@@ -10,8 +10,12 @@ import { templates } from '../../data/templates';
 import type { TagDefinition } from '../../data/tags';
 import { clearEntryDraft, getEntryDraft, saveEntryDraft } from '../../lib/entryDraft';
 import { registerEntryLeaveGuard } from '../../lib/entryNavigationGuard';
+import { createLocalPhotoId, createLocalReviewId } from '../../lib/localIds';
+import { preparePhotoForUpload } from '../../lib/photoProcessing';
 import { buildCalendarCells, formatDateLabel, isValidDateKey, mergeDateWithTime, toDateKey } from '../../lib/reviewDate';
-import { getReviewById, getTagCatalog, saveReview, updateReview, type ReviewItem, type ReviewPhoto } from '../../lib/storage';
+import { reviewRepository, ReviewSyncError } from '../../lib/reviewRepository';
+import { tagRepository } from '../../lib/tagRepository';
+import { DuplicateReviewDateError, type ReviewItem, type ReviewPhoto } from '../../lib/storage';
 import { useAppTheme } from '../../lib/theme-context';
 import { createCardShadow } from '../../lib/theme';
 
@@ -37,7 +41,7 @@ type Snapshot = {
 export default function EntryScreen() {
   const navigation = useNavigation();
   const { templateId, reviewId, date } = useLocalSearchParams<{ templateId?: string; reviewId?: string; date?: string }>();
-  const { theme } = useAppTheme();
+  const { theme, t } = useAppTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
   const isEditMode = Boolean(reviewId);
   const draftKey = isEditMode ? `edit:${reviewId}` : 'new';
@@ -60,6 +64,7 @@ export default function EntryScreen() {
   const [editingReview, setEditingReview] = useState<ReviewItem | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isDraftReady, setIsDraftReady] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const initialSnapshotRef = useRef('');
   const skipLeaveGuardRef = useRef(false);
 
@@ -71,7 +76,7 @@ export default function EntryScreen() {
   const calendarCells = useMemo(() => buildCalendarCells(calendarMonth), [calendarMonth]);
 
   const loadTagCatalog = useCallback(async () => {
-    setTagCatalog(await getTagCatalog());
+    setTagCatalog(await tagRepository.getCatalog());
   }, []);
 
   useFocusEffect(useCallback(() => {
@@ -82,12 +87,12 @@ export default function EntryScreen() {
     let active = true;
     const load = async () => {
       try {
-        const [catalog, draft] = await Promise.all([getTagCatalog(), getEntryDraft(draftKey)]);
+        const [catalog, draft] = await Promise.all([tagRepository.getCatalog(), getEntryDraft(draftKey)]);
         if (!active) return;
         setTagCatalog(catalog);
 
         if (reviewId) {
-          const review = await getReviewById(reviewId);
+          const review = await reviewRepository.getById(reviewId);
           if (!review) {
             Alert.alert('記録が見つかりませんでした');
             router.replace('/(tabs)/history');
@@ -205,7 +210,20 @@ export default function EntryScreen() {
       }
       const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsMultipleSelection: true, selectionLimit: Math.max(6 - photos.length, 1), quality: 0.8 });
       if (result.canceled) return;
-      const next = result.assets.slice(0, Math.max(6 - photos.length, 0)).map((asset, index) => ({ id: `photo-${Date.now()}-${index}`, uri: asset.uri, comment: '', order: photos.length + index }));
+      const preparedAssets = await Promise.all(
+        result.assets
+          .slice(0, Math.max(6 - photos.length, 0))
+          .map(async (asset) => ({
+            id: createLocalPhotoId(),
+            uri: await preparePhotoForUpload(asset.uri),
+          }))
+      );
+      const next = preparedAssets.map((asset, index) => ({
+        id: asset.id,
+        uri: asset.uri,
+        comment: '',
+        order: photos.length + index,
+      }));
       setPhotos((prev) => [...prev, ...next]);
     } catch (error) {
       console.error(error);
@@ -214,6 +232,10 @@ export default function EntryScreen() {
   };
 
   const handleSave = async () => {
+    if (isSaving) {
+      return;
+    }
+
     if (!isValidDateKey(selectedDateKey)) {
       setDateError('YYYY-MM-DD 形式で正しい日付を入力してください');
       Alert.alert('日付を確認してください');
@@ -226,15 +248,26 @@ export default function EntryScreen() {
       return;
     }
     try {
-      const payload: ReviewItem = { id: editingReview?.id ?? String(Date.now()), createdAt: mergeDateWithTime(selectedDateKey, editingReview?.createdAt), updatedAt: new Date().toISOString(), category, mood, templateId: selectedTemplate.id, templateName: selectedTemplate.name, actionTagIds, stateTagIds, answers: answersForSave, photos: photos.map((photo, index) => ({ ...photo, order: index })), isFavorite: editingReview?.isFavorite ?? false };
-      if (editingReview) await updateReview(payload); else await saveReview(payload);
+      setIsSaving(true);
+      const payload: ReviewItem = { id: editingReview?.id ?? createLocalReviewId(), createdAt: mergeDateWithTime(selectedDateKey, editingReview?.createdAt), updatedAt: new Date().toISOString(), category, mood, templateId: selectedTemplate.id, templateName: selectedTemplate.name, actionTagIds, stateTagIds, answers: answersForSave, photos: photos.map((photo, index) => ({ ...photo, order: index })), isFavorite: editingReview?.isFavorite ?? false };
+      if (editingReview) await reviewRepository.update(payload); else await reviewRepository.create(payload);
       await clearEntryDraft(draftKey);
       initialSnapshotRef.current = currentSnapshot;
       skipLeaveGuardRef.current = true;
       router.replace('/(tabs)/history');
     } catch (error) {
       console.error(error);
-      Alert.alert('保存に失敗しました');
+      if (error instanceof DuplicateReviewDateError) {
+        Alert.alert(t('entry.duplicateDateTitle'), t('entry.duplicateDateBody'));
+        return;
+      }
+      if (error instanceof ReviewSyncError) {
+        Alert.alert('クラウド同期に失敗しました', `${error.message}\n\n端末側の内容は保持されています。通信状況を確認して、あとでもう一度お試しください。`);
+        return;
+      }
+      Alert.alert('保存に失敗しました', '少し時間をおいて、もう一度お試しください。');
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -347,7 +380,15 @@ export default function EntryScreen() {
         ))}
       </View>
 
-      <Pressable style={styles.saveButton} onPress={handleSave}><Text style={styles.saveButtonText}>{isEditMode ? '更新する' : '保存する'}</Text></Pressable>
+      <Pressable
+        style={[styles.saveButton, isSaving && styles.saveButtonDisabled]}
+        onPress={handleSave}
+        disabled={isSaving}
+      >
+        <Text style={styles.saveButtonText}>
+          {isSaving ? '保存しています…' : isEditMode ? '更新する' : '保存する'}
+        </Text>
+      </Pressable>
     </ScrollView>
   );
 }
@@ -449,6 +490,7 @@ function createStyles(theme: ReturnType<typeof useAppTheme>['theme']) {
     photoPreview: { width: '100%', height: 180, borderRadius: theme.radius.lg, marginBottom: theme.spacing.sm, backgroundColor: theme.colors.surfaceStrong },
     photoRemoveButton: { position: 'absolute', top: theme.spacing.md, right: theme.spacing.md, width: 28, height: 28, borderRadius: theme.radius.pill, alignItems: 'center', justifyContent: 'center', backgroundColor: theme.colors.surface, borderWidth: 1, borderColor: theme.colors.border },
     saveButton: { backgroundColor: theme.colors.primary, borderRadius: theme.radius.xl, paddingVertical: 18, alignItems: 'center', marginTop: theme.spacing.sm, marginBottom: theme.spacing.xxl },
+    saveButtonDisabled: { opacity: 0.6 },
     saveButtonText: { fontSize: 17, lineHeight: 22, fontWeight: '700', color: theme.colors.white },
   });
 }

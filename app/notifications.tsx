@@ -1,10 +1,7 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as Notifications from 'expo-notifications';
 import { useFocusEffect } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
 import {
   Alert,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -14,22 +11,18 @@ import {
   View,
 } from 'react-native';
 import BackHeader from '../components/BackHeader';
+import {
+  cancelExistingReminderIfAny,
+  configureReminderNotifications,
+  ensureNotificationPermission,
+  loadReminderSettings,
+  saveReminderSettings,
+  scheduleDailyReminder,
+} from '../lib/reminderSettings';
 import { useAppTheme } from '../lib/theme-context';
 import { createCardShadow } from '../lib/theme';
 
-const REMINDER_ENABLED_KEY = 'furikaeri-reminder-enabled';
-const REMINDER_HOUR_KEY = 'furikaeri-reminder-hour';
-const REMINDER_MINUTE_KEY = 'furikaeri-reminder-minute';
-const REMINDER_NOTIFICATION_ID_KEY = 'furikaeri-reminder-notification-id';
-
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowBanner: true,
-    shouldShowList: true,
-    shouldPlaySound: false,
-    shouldSetBadge: false,
-  }),
-});
+configureReminderNotifications();
 
 export default function NotificationsScreen() {
   const { theme } = useAppTheme();
@@ -53,7 +46,7 @@ export default function NotificationsScreen() {
       if (nextValue) {
         const granted = await ensureNotificationPermission();
         if (!granted) {
-          Alert.alert('通知の許可が必要です。');
+          Alert.alert('通知の許可が必要です');
           return;
         }
 
@@ -66,7 +59,7 @@ export default function NotificationsScreen() {
       setEnabled(nextValue);
     } catch (error) {
       console.error(error);
-      Alert.alert('通知設定の更新に失敗しました。');
+      Alert.alert('通知設定の更新に失敗しました');
     }
   };
 
@@ -82,7 +75,7 @@ export default function NotificationsScreen() {
       nextMinute < 0 ||
       nextMinute > 59
     ) {
-      Alert.alert('時刻は 00:00 から 23:59 の範囲で入力してください。');
+      Alert.alert('時刻は 00:00 から 23:59 の範囲で入力してください');
       return;
     }
 
@@ -90,14 +83,14 @@ export default function NotificationsScreen() {
     if (enabled) {
       await scheduleDailyReminder(nextHour, nextMinute);
     }
-    Alert.alert('通知時刻を更新しました。');
+    Alert.alert('通知時刻を更新しました');
   };
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
       <BackHeader
         title="通知設定"
-        subtitle="毎日開きやすくするために、通知は最低限だけにしています。"
+        subtitle="毎日のふりかえりを忘れないよう、端末の通知を設定できます。"
       />
 
       <View style={styles.card}>
@@ -105,7 +98,7 @@ export default function NotificationsScreen() {
           <View style={styles.flexFill}>
             <Text style={styles.cardTitle}>毎日のリマインド</Text>
             <Text style={styles.cardBody}>
-              {enabled ? `${hour}:${minute} に通知します。` : '今はオフです。'}
+              {enabled ? `${hour}:${minute} に通知します` : '現在はオフです'}
             </Text>
           </View>
           <Switch
@@ -145,82 +138,6 @@ export default function NotificationsScreen() {
       </View>
     </ScrollView>
   );
-}
-
-async function loadReminderSettings() {
-  const [enabledRaw, hourRaw, minuteRaw] = await Promise.all([
-    AsyncStorage.getItem(REMINDER_ENABLED_KEY),
-    AsyncStorage.getItem(REMINDER_HOUR_KEY),
-    AsyncStorage.getItem(REMINDER_MINUTE_KEY),
-  ]);
-
-  return {
-    enabled: enabledRaw === 'true',
-    hour: hourRaw ? Number(hourRaw) : 22,
-    minute: minuteRaw ? Number(minuteRaw) : 0,
-  };
-}
-
-async function saveReminderSettings(enabled: boolean, hour: number, minute: number) {
-  await Promise.all([
-    AsyncStorage.setItem(REMINDER_ENABLED_KEY, String(enabled)),
-    AsyncStorage.setItem(REMINDER_HOUR_KEY, String(hour)),
-    AsyncStorage.setItem(REMINDER_MINUTE_KEY, String(minute)),
-  ]);
-}
-
-async function ensureNotificationPermission() {
-  if (Platform.OS === 'android') {
-    await Notifications.setNotificationChannelAsync('daily-reminder', {
-      name: 'Furikaeri Reminder',
-      importance: Notifications.AndroidImportance.DEFAULT,
-    });
-  }
-
-  const current = await Notifications.getPermissionsAsync();
-  if (current.granted) return true;
-
-  const requested = await Notifications.requestPermissionsAsync({
-    ios: {
-      allowAlert: true,
-      allowBadge: true,
-      allowSound: true,
-    },
-  });
-
-  return requested.granted;
-}
-
-async function cancelExistingReminderIfAny() {
-  const existingId = await AsyncStorage.getItem(REMINDER_NOTIFICATION_ID_KEY);
-  if (existingId) {
-    try {
-      await Notifications.cancelScheduledNotificationAsync(existingId);
-    } catch (error) {
-      console.error(error);
-    }
-  }
-
-  await AsyncStorage.removeItem(REMINDER_NOTIFICATION_ID_KEY);
-}
-
-async function scheduleDailyReminder(hour: number, minute: number) {
-  await cancelExistingReminderIfAny();
-
-  const id = await Notifications.scheduleNotificationAsync({
-    content: {
-      title: 'ふりかえりの時間です',
-      body: '今日はどんな1日だったか、ひとことだけでも残してみましょう。',
-    },
-    trigger: {
-      type: Notifications.SchedulableTriggerInputTypes.DAILY,
-      hour,
-      minute,
-      ...(Platform.OS === 'android' ? { channelId: 'daily-reminder' } : {}),
-    },
-  });
-
-  await AsyncStorage.setItem(REMINDER_NOTIFICATION_ID_KEY, id);
 }
 
 function createStyles(theme: ReturnType<typeof useAppTheme>['theme']) {

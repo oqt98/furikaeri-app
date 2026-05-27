@@ -1,0 +1,15 @@
+appId: com.oqt98.furikaeriapp
+---
+- runFlow: helpers/create-review.yaml
+
+- tapOn:
+    id: tab-analytics
+
+- assertVisible:
+    id: screen-analytics
+
+- tapOn:
+    id: tab-settings
+
+- assertVisible:
+    text: "Notion CSV Import"
