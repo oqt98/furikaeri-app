@@ -82,7 +82,13 @@ Deno.serve(async (request) => {
     );
   } catch (error) {
     console.error('weekly-summary error', error);
-    return jsonResponse({ error: 'Unexpected error occurred.' }, 500);
+    return jsonResponse(
+      {
+        error: 'Unexpected error occurred.',
+        detail: error instanceof Error ? error.message : String(error),
+      },
+      500
+    );
   }
 });
 
@@ -216,7 +222,10 @@ async function createWeeklySummary(
   }
 
   const data = await response.json();
-  const outputText = typeof data.output_text === 'string' ? data.output_text : '';
+  const outputText = extractOutputText(data);
+  if (!outputText) {
+    throw new Error('OpenAI response did not include output text.');
+  }
   const parsed = JSON.parse(outputText) as WeeklySummaryResponse;
 
   if (!isValidSummary(parsed)) {
@@ -224,6 +233,37 @@ async function createWeeklySummary(
   }
 
   return parsed;
+}
+
+function extractOutputText(data: unknown) {
+  if (data && typeof data === 'object') {
+    const directText = (data as { output_text?: unknown }).output_text;
+    if (typeof directText === 'string') {
+      return directText;
+    }
+
+    const output = (data as { output?: unknown }).output;
+    if (Array.isArray(output)) {
+      return output
+        .flatMap((item) => {
+          if (!item || typeof item !== 'object') return [];
+          const content = (item as { content?: unknown }).content;
+          if (!Array.isArray(content)) return [];
+          return content
+            .map((part) => {
+              if (!part || typeof part !== 'object') return '';
+              const typedPart = part as { type?: unknown; text?: unknown };
+              return typedPart.type === 'output_text' && typeof typedPart.text === 'string'
+                ? typedPart.text
+                : '';
+            })
+            .filter(Boolean);
+        })
+        .join('');
+    }
+  }
+
+  return '';
 }
 
 function isValidSummary(summary: WeeklySummaryResponse) {
