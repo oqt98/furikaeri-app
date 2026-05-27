@@ -1,6 +1,6 @@
-# furikaeri-app
+# Daynote-ふりかえり日記
 
-`furikaeri-app` は、毎日のふりかえりを軽く続けるための Expo / React Native アプリです。
+`Daynote-ふりかえり日記` は、毎日のふりかえりを軽く続けるための Expo / React Native アプリです。
 長い日記を書くよりも、短く振り返って次の日を少し良くすることを重視しています。
 
 ## 初回リリース方針
