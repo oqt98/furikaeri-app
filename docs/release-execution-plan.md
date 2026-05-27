@@ -18,6 +18,7 @@
    - `npm run lint`
 
 2. Supabase 実環境確認
+   - Supabase CLI を使う場合は `supabase` コマンドが使える状態にする
    - `.env.example` を `.env` にコピーする
    - `EXPO_PUBLIC_SUPABASE_URL` を設定する
    - `EXPO_PUBLIC_SUPABASE_ANON_KEY` を設定する
@@ -34,11 +35,12 @@
 
 4. Android 公開準備
    - アプリ名を確定する
+   - Android 実機確認用に Android Studio / adb / 端末の USB デバッグを準備する
    - production build を通す
    - Android 実機で主要導線を確認する
+   - [Play Store 掲載文案](./play-store-listing-draft.md) を最終確認する
+   - [プライバシーポリシー草案](./privacy-policy-draft.md) を最終確認する
    - Play Store 用スクリーンショットを用意する
-   - Play Store の短い説明文と詳しい説明文を書く
-   - プライバシーポリシーを用意する
    - データ収集 / 共有の申告を埋める
 
 ## 実機で見る主要導線
@@ -51,6 +53,20 @@
 6. カレンダーで同日の複数記録が見えることを確認
 7. 分析画面で週次 AI 要約を生成
 8. 通信オフまたは Supabase 未設定時に local-first で壊れないことを確認
+
+## このPCで追加準備が必要なもの
+
+2026-05-27 時点では、このPCの PATH 上に次のコマンドは見つかっていません。
+
+- `supabase`
+- `adb`
+
+そのため、Supabase Edge Function の deploy や Android 実機接続は、次のどちらかで進めます。
+
+- Android Studio / Supabase CLI をこのPCに入れてから実行する
+- 会社PCなど、すでに CLI と実機接続環境があるPCで実行する
+
+Expo の設定確認は `npx expo config --type public` で通っています。
 
 ## 公開判断
 

@@ -106,6 +106,8 @@
 - [品質確認チェックリスト](./docs/quality-checklist.md)
 - [Android 公開準備チェックリスト](./docs/android-release-checklist.md)
 - [公開前の実行計画](./docs/release-execution-plan.md)
+- [Play Store 掲載文案](./docs/play-store-listing-draft.md)
+- [プライバシーポリシー草案](./docs/privacy-policy-draft.md)
 
 ## セットアップ
 

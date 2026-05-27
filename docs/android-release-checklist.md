@@ -13,6 +13,8 @@
 参照:
 - [app.json](C:\Users\238ks\furikaeri-app\app.json)
 - [eas.json](C:\Users\238ks\furikaeri-app\eas.json)
+- [Play Store 掲載文案](./play-store-listing-draft.md)
+- [プライバシーポリシー草案](./privacy-policy-draft.md)
 
 ## 今の状態で不足しやすいもの
 
@@ -22,6 +24,8 @@
 - スクリーンショット
 - プライバシーポリシー
 - 初回公開用のバージョン運用ルール
+- Android 実機接続環境
+- Supabase CLI または Supabase dashboard での deploy 手段
 - 本番ビルド手順の実行確認
 
 ## 公開前に確認する設定
