@@ -1,50 +1,22 @@
 import { useFocusEffect } from 'expo-router';
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useMemo, useState, type ReactNode } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import AppHeader from '../../components/AppHeader';
 import SideMenu from '../../components/SideMenu';
 import SwipeTabPage from '../../components/SwipeTabPage';
 import { CATEGORIES, MOOD_OPTIONS } from '../../data/reviewOptions';
 import { buildInsightSummary } from '../../lib/insights';
-import {
-  WeeklyAiSummaryError,
-  generateWeeklyAiSummary,
-  type WeeklyAiSummaryResponse,
-} from '../../lib/weeklyAiSummary';
-import {
-  getContinuityMessage,
-  getWeeklySummaryLabels,
-} from '../../lib/weeklySummaryCopy';
-import {
-  buildWeeklySummarySource,
-  formatWeekLabel,
-} from '../../lib/weeklySummary';
 import { reviewRepository } from '../../lib/reviewRepository';
-import { tagRepository } from '../../lib/tagRepository';
-import {
-  type ReviewItem,
-  type TagCatalog,
-} from '../../lib/storage';
-import { isSupabaseEnabled } from '../../lib/supabase/env';
-import { useAppTheme } from '../../lib/theme-context';
+import { type ReviewItem } from '../../lib/storage';
 import { createCardShadow } from '../../lib/theme';
-
-const EMPTY_TAG_CATALOG: TagCatalog = {
-  action: [],
-  state: [],
-};
+import { useAppTheme } from '../../lib/theme-context';
 
 export default function AnalyticsScreen() {
-  const { theme, t, locale, localeTag } = useAppTheme();
+  const { theme, t, locale } = useAppTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
-  const weeklyLabels = useMemo(() => getWeeklySummaryLabels(locale), [locale]);
   const [reviews, setReviews] = useState<ReviewItem[]>([]);
-  const [tagCatalog, setTagCatalog] = useState<TagCatalog>(EMPTY_TAG_CATALOG);
   const [isMenuVisible, setIsMenuVisible] = useState(false);
-  const [isGeneratingWeeklySummary, setIsGeneratingWeeklySummary] = useState(false);
   const [isBreakdownVisible, setIsBreakdownVisible] = useState(false);
-  const [weeklySummary, setWeeklySummary] = useState<WeeklyAiSummaryResponse | null>(null);
-  const [weeklySummaryError, setWeeklySummaryError] = useState<string | null>(null);
   const [isLoadingData, setIsLoadingData] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -53,15 +25,10 @@ export default function AnalyticsScreen() {
     setLoadError(null);
 
     try {
-      const [nextReviews, nextTagCatalog] = await Promise.all([
-        reviewRepository.list(),
-        tagRepository.getCatalog(),
-      ]);
-      setReviews(nextReviews);
-      setTagCatalog(nextTagCatalog);
+      setReviews(await reviewRepository.list());
     } catch (error) {
       console.error('analytics load error:', error);
-      setLoadError('分析データを読み込めませんでした。少し時間をおいて再読み込みしてください。');
+      setLoadError('分析データを読み込めませんでした。少し時間をおいて再度お試しください。');
     } finally {
       setIsLoadingData(false);
     }
@@ -97,51 +64,6 @@ export default function AnalyticsScreen() {
   }, [reviews]);
 
   const insight = useMemo(() => buildInsightSummary(reviews), [reviews]);
-  const weeklySource = useMemo(
-    () => buildWeeklySummarySource(reviews, tagCatalog, new Date()),
-    [reviews, tagCatalog]
-  );
-  const weeklyRangeLabel = useMemo(
-    () => formatWeekLabel(weeklySource.weekStart, weeklySource.weekEnd),
-    [weeklySource.weekEnd, weeklySource.weekStart]
-  );
-  const continuityMessage = useMemo(
-    () => getContinuityMessage(locale, weeklySource.reviewCount),
-    [locale, weeklySource.reviewCount]
-  );
-
-  useEffect(() => {
-    setWeeklySummary(null);
-    setWeeklySummaryError(null);
-  }, [weeklySource.weekStart, weeklySource.reviewCount]);
-
-  const handleGenerateWeeklySummary = useCallback(async () => {
-    if (weeklySource.reviewCount === 0 || isGeneratingWeeklySummary) {
-      return;
-    }
-
-    setIsGeneratingWeeklySummary(true);
-    setWeeklySummaryError(null);
-
-    try {
-      const nextSummary = await generateWeeklyAiSummary(weeklySource);
-      setWeeklySummary(nextSummary);
-    } catch (error) {
-      console.error('generateWeeklyAiSummary error:', error);
-      if (error instanceof WeeklyAiSummaryError && error.code === 'backend-disabled') {
-        setWeeklySummaryError(weeklyLabels.unavailable);
-      } else {
-        setWeeklySummaryError(weeklyLabels.error);
-      }
-    } finally {
-      setIsGeneratingWeeklySummary(false);
-    }
-  }, [
-    isGeneratingWeeklySummary,
-    weeklyLabels.error,
-    weeklyLabels.unavailable,
-    weeklySource,
-  ]);
 
   return (
     <SwipeTabPage tabKey="analytics">
@@ -161,24 +83,10 @@ export default function AnalyticsScreen() {
           />
         ) : null}
 
-        <WeeklySummaryCard
-          continuityMessage={continuityMessage}
-          generatedAt={weeklySummary?.generatedAt ?? null}
-          isBackendEnabled={isSupabaseEnabled()}
-          isLoading={isGeneratingWeeklySummary}
-          labels={weeklyLabels}
-          localeTag={localeTag}
-          onGenerate={handleGenerateWeeklySummary}
-          summary={weeklySummary}
-          summaryError={weeklySummaryError}
-          weekLabel={weeklyRangeLabel}
-          weeklySource={weeklySource}
-        />
-
         {isLoadingData ? (
           <View style={styles.emptyCard}>
             <Text style={styles.emptyTitle}>分析データを読み込んでいます</Text>
-            <Text style={styles.emptyText}>記録件数や今週の要約を準備しています。</Text>
+            <Text style={styles.emptyText}>記録件数や傾向を準備しています。</Text>
           </View>
         ) : reviews.length === 0 ? (
           <View testID="analytics-empty-state" style={styles.emptyCard}>
@@ -203,7 +111,7 @@ export default function AnalyticsScreen() {
               <Text style={styles.detailLead}>
                 {locale === 'en'
                   ? 'Open this only when you want a more detailed breakdown.'
-                  : '細かい内訳を見たいときだけ開けるようにしました。'}
+                  : '細かい内訳を見たいときだけ開けるようにしています。'}
               </Text>
               <Pressable
                 style={styles.detailToggle}
@@ -242,122 +150,6 @@ export default function AnalyticsScreen() {
   );
 }
 
-function WeeklySummaryCard({
-  continuityMessage,
-  generatedAt,
-  isBackendEnabled,
-  isLoading,
-  labels,
-  localeTag,
-  onGenerate,
-  summary,
-  summaryError,
-  weekLabel,
-  weeklySource,
-}: {
-  continuityMessage: string;
-  generatedAt: string | null;
-  isBackendEnabled: boolean;
-  isLoading: boolean;
-  labels: ReturnType<typeof getWeeklySummaryLabels>;
-  localeTag: string;
-  onGenerate: () => void;
-  summary: WeeklyAiSummaryResponse | null;
-  summaryError: string | null;
-  weekLabel: string;
-  weeklySource: ReturnType<typeof buildWeeklySummarySource>;
-}) {
-  const { theme } = useAppTheme();
-  const styles = useMemo(() => createStyles(theme), [theme]);
-
-  const statItems = [
-    { label: labels.countLabel, value: `${weeklySource.reviewCount}` },
-    { label: labels.daysLabel, value: `${weeklySource.recordedDays}` },
-    { label: labels.missingLabel, value: `${weeklySource.missingDays}` },
-  ];
-
-  return (
-    <View style={styles.weeklyCard} testID="analytics-weekly-summary-card">
-      <Text style={styles.weeklyEyebrow}>{weekLabel}</Text>
-      <Text style={styles.weeklyTitle}>{labels.cardTitle}</Text>
-      <Text style={styles.weeklySubtitle}>{labels.cardSubtitle}</Text>
-
-      <View style={styles.weeklyStatsRow}>
-        {statItems.map((item) => (
-          <View key={item.label} style={styles.weeklyStatItem}>
-            <Text style={styles.weeklyStatLabel}>{item.label}</Text>
-            <Text style={styles.weeklyStatValue}>{item.value}</Text>
-          </View>
-        ))}
-      </View>
-
-      <Text style={styles.weeklyContinuity}>{continuityMessage}</Text>
-      {weeklySource.reviewCount > 0 && weeklySource.reviewCount <= 2 ? (
-        <Text style={styles.weeklyHint}>
-          記録が少ない週は、残せた内容をやさしく短くまとめます。
-        </Text>
-      ) : null}
-
-      {weeklySource.reviewCount === 0 ? (
-        <View style={styles.weeklyEmptyBox}>
-          <Text style={styles.weeklyEmptyTitle}>{labels.emptyTitle}</Text>
-          <Text style={styles.weeklyEmptyBody}>{labels.emptyBody}</Text>
-        </View>
-      ) : (
-        <>
-          <Pressable
-            accessibilityRole="button"
-            disabled={isLoading || !isBackendEnabled}
-            onPress={onGenerate}
-            style={[
-              styles.weeklyActionButton,
-              (isLoading || !isBackendEnabled) && styles.weeklyActionButtonDisabled,
-            ]}
-          >
-            <Text style={styles.weeklyActionButtonText}>
-              {summary ? labels.regenerate : labels.generate}
-            </Text>
-          </Pressable>
-
-          {!isBackendEnabled ? (
-            <Text style={styles.weeklyHint}>{labels.unavailable}</Text>
-          ) : null}
-
-          {isLoading ? <Text style={styles.weeklyHint}>{labels.loading}</Text> : null}
-          {summaryError ? (
-            <View style={styles.weeklyRetryBlock}>
-              <Text style={styles.weeklyError}>{summaryError}</Text>
-              <Pressable
-                accessibilityRole="button"
-                onPress={onGenerate}
-                style={styles.weeklyRetryButton}
-              >
-                <Text style={styles.weeklyRetryButtonText}>もう一度試す</Text>
-              </Pressable>
-            </View>
-          ) : null}
-
-          {summary ? (
-            <View style={styles.weeklySummaryBox}>
-              <Text style={styles.weeklyHeadlineLabel}>{labels.headline}</Text>
-              <Text style={styles.weeklyHeadline}>{summary.summary.headline}</Text>
-
-              <SummarySection label={labels.pattern} value={summary.summary.pattern} />
-              <SummarySection label={labels.positive} value={summary.summary.positive} />
-              <SummarySection label={labels.nextAction} value={summary.summary.nextAction} />
-
-              <Text style={styles.weeklyGeneratedAt}>
-                {labels.lastUpdatedPrefix}{' '}
-                {new Date(generatedAt ?? '').toLocaleString(localeTag)}
-              </Text>
-            </View>
-          ) : null}
-        </>
-      )}
-    </View>
-  );
-}
-
 function RetryCard({
   title,
   body,
@@ -379,18 +171,6 @@ function RetryCard({
       <Pressable style={styles.retryButton} onPress={onPress}>
         <Text style={styles.retryButtonText}>{buttonLabel}</Text>
       </Pressable>
-    </View>
-  );
-}
-
-function SummarySection({ label, value }: { label: string; value: string }) {
-  const { theme } = useAppTheme();
-  const styles = useMemo(() => createStyles(theme), [theme]);
-
-  return (
-    <View style={styles.weeklySection}>
-      <Text style={styles.weeklySectionLabel}>{label}</Text>
-      <Text style={styles.weeklySectionBody}>{value}</Text>
     </View>
   );
 }
@@ -549,147 +329,6 @@ function createStyles(theme: ReturnType<typeof useAppTheme>['theme']) {
     retryButtonText: {
       ...theme.typography.caption,
       color: theme.colors.primaryDark,
-    },
-    weeklyCard: {
-      ...createCardShadow(theme),
-      backgroundColor: theme.colors.surface,
-      borderRadius: theme.radius.xl,
-      borderWidth: 1,
-      borderColor: theme.colors.border,
-      padding: theme.spacing.xl,
-      marginBottom: theme.spacing.md,
-    },
-    weeklyEyebrow: {
-      ...theme.typography.caption,
-      color: theme.colors.primaryDark,
-      marginBottom: theme.spacing.sm,
-    },
-    weeklyTitle: {
-      ...theme.typography.section,
-      color: theme.colors.text,
-      marginBottom: 6,
-    },
-    weeklySubtitle: {
-      ...theme.typography.body,
-      color: theme.colors.textMuted,
-      marginBottom: theme.spacing.md,
-    },
-    weeklyStatsRow: {
-      flexDirection: 'row',
-      gap: theme.spacing.sm,
-      marginBottom: theme.spacing.md,
-    },
-    weeklyStatItem: {
-      flex: 1,
-      backgroundColor: theme.colors.surfaceMuted,
-      borderRadius: theme.radius.lg,
-      padding: theme.spacing.md,
-    },
-    weeklyStatLabel: {
-      ...theme.typography.caption,
-      color: theme.colors.textSoft,
-      marginBottom: 4,
-    },
-    weeklyStatValue: {
-      fontSize: 22,
-      lineHeight: 28,
-      fontWeight: '700',
-      color: theme.colors.text,
-    },
-    weeklyContinuity: {
-      ...theme.typography.body,
-      color: theme.colors.text,
-      marginBottom: theme.spacing.md,
-    },
-    weeklyEmptyBox: {
-      backgroundColor: theme.colors.primarySoft,
-      borderRadius: theme.radius.lg,
-      padding: theme.spacing.lg,
-    },
-    weeklyEmptyTitle: {
-      ...theme.typography.body,
-      color: theme.colors.primaryDark,
-      fontWeight: '700',
-      marginBottom: 4,
-    },
-    weeklyEmptyBody: {
-      ...theme.typography.body,
-      color: theme.colors.textMuted,
-    },
-    weeklyActionButton: {
-      alignItems: 'center',
-      backgroundColor: theme.colors.primary,
-      borderRadius: theme.radius.lg,
-      marginBottom: theme.spacing.sm,
-      paddingHorizontal: theme.spacing.lg,
-      paddingVertical: 14,
-    },
-    weeklyActionButtonDisabled: {
-      opacity: 0.45,
-    },
-    weeklyActionButtonText: {
-      color: theme.colors.white,
-      fontSize: 15,
-      fontWeight: '700',
-    },
-    weeklyHint: {
-      ...theme.typography.caption,
-      color: theme.colors.textMuted,
-      marginBottom: theme.spacing.sm,
-    },
-    weeklyError: {
-      ...theme.typography.caption,
-      color: theme.colors.danger,
-      marginBottom: theme.spacing.sm,
-    },
-    weeklyRetryBlock: {
-      marginBottom: theme.spacing.sm,
-    },
-    weeklyRetryButton: {
-      alignSelf: 'flex-start',
-      borderRadius: theme.radius.lg,
-      borderWidth: 1,
-      borderColor: theme.colors.border,
-      backgroundColor: theme.colors.surfaceMuted,
-      paddingHorizontal: theme.spacing.md,
-      paddingVertical: 10,
-    },
-    weeklyRetryButtonText: {
-      ...theme.typography.caption,
-      color: theme.colors.primaryDark,
-    },
-    weeklySummaryBox: {
-      backgroundColor: theme.colors.primarySoft,
-      borderRadius: theme.radius.lg,
-      padding: theme.spacing.lg,
-      marginTop: theme.spacing.sm,
-    },
-    weeklyHeadlineLabel: {
-      ...theme.typography.caption,
-      color: theme.colors.primaryDark,
-      marginBottom: 4,
-    },
-    weeklyHeadline: {
-      ...theme.typography.section,
-      color: theme.colors.text,
-      marginBottom: theme.spacing.md,
-    },
-    weeklySection: {
-      marginBottom: theme.spacing.md,
-    },
-    weeklySectionLabel: {
-      ...theme.typography.caption,
-      color: theme.colors.textSoft,
-      marginBottom: 4,
-    },
-    weeklySectionBody: {
-      ...theme.typography.body,
-      color: theme.colors.text,
-    },
-    weeklyGeneratedAt: {
-      ...theme.typography.caption,
-      color: theme.colors.textSoft,
-      marginTop: theme.spacing.xs,
     },
     glanceCard: {
       ...createCardShadow(theme),

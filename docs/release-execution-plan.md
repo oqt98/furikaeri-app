@@ -1,88 +1,64 @@
 # 公開前の実行計画
 
-このメモは、初回 Android リリースまでに実際に潰す順番を固定するためのものです。
+このメモは、初回 Android リリースまでに実際に潰す作業を整理するためのものです。
 
 ## 決めた仕様
 
-- 1 日に保存できる記録は 1 件まで
-- 別の日付の記録は作成できる
-- 初回リリースに週次 AI 要約を入れる
+- 1日に保存できるふりかえりは1件まで
+- 別日分の記録は作成できる
+- 初回リリースでは週次AI要約を入れない
+- 初回リリースではインポート / エクスポートを入れない
 - 初回リリースは Android のみ
 - backend は Supabase
-- 認証は匿名開始を基本にし、正式アカウント連携は後続で詰める
+- 認証は匿名開始を基本にする
 
 ## 直近でやること
 
 1. ローカル品質確認
-   - `npm run typecheck`
-   - `npm run test -- --runInBand`
    - `npm run lint`
+   - `npm run typecheck`
+   - `npm run test`
+   - `npm run build:web`
 
-2. Supabase 実環境確認
-   - Supabase CLI を使う場合は `supabase` コマンドが使える状態にする
-   - `.env.example` を `.env` にコピーする
-   - `EXPO_PUBLIC_SUPABASE_URL` を設定する
-   - `EXPO_PUBLIC_SUPABASE_ANON_KEY` を設定する
-   - Supabase Auth の Anonymous Sign-Ins を有効にする
-   - `supabase/migrations/20260409_phase1_initial_schema.sql` を適用する
-   - Android 実機で記録作成、編集、削除、お気に入り、タグ、写真を確認する
+2. Supabase 実機確認
+   - Anonymous Sign-Ins が有効であること
+   - DB migration が適用済みであること
+   - Android 実機で記録作成、編集、削除、タグ、写真が動くこと
+   - 同じ日付で2件目を作れず、別日分は作れること
 
-3. 週次 AI 要約確認
-   - `supabase/functions/weekly-summary` を deploy する
-   - Supabase secrets に `OPENAI_API_KEY` を設定する
-   - 必要なら `OPENAI_WEEKLY_SUMMARY_MODEL` を設定する
-   - 分析画面から週次 AI 要約を生成できることを確認する
-   - 失敗時にユーザー向け文言が崩れないことを確認する
-
-4. Android 公開準備
-   - アプリ名を確定する
-   - Android 実機確認用に Android Studio / adb / 端末の USB デバッグを準備する
+3. Android 公開準備
+   - アプリ名、アイコン、splash、version を確認する
    - production build を通す
    - Android 実機で主要導線を確認する
-   - [Play Store 掲載文案](./play-store-listing-draft.md) を最終確認する
-   - [プライバシーポリシー草案](./privacy-policy-draft.md) を最終確認する
-   - Play Store 用スクリーンショットを用意する
+   - Play Store 掲載文案を最終確認する
+   - プライバシーポリシーを最終確認する
    - データ収集 / 共有の申告を埋める
 
 ## 実機で見る主要導線
 
 1. アプリ起動
-2. 気分とひとことだけで記録を保存
-3. 同じ日にもう 1 件保存しようとすると重複エラーになることを確認
-4. 別の日付の記録を保存できることを確認
-5. タグ、写真、テンプレ質問を開いて追加
+2. 気分とひとことで記録を保存
+3. 同じ日にもう1件保存しようとすると重複扱いになること
+4. 別の日付の記録を保存できること
+5. タグ、写真、テンプレート質問を開いて追加
 6. 履歴で検索、絞り込み、お気に入り切り替え
-7. カレンダーで日付ごとの記録が見えることを確認
-8. 分析画面で週次 AI 要約を生成
-9. 通信オフまたは Supabase 未設定時に local-first で壊れないことを確認
-
-## このPCで追加準備が必要なもの
-
-2026-05-27 時点では、このPCの PATH 上に次のコマンドは見つかっていません。
-
-- `supabase`
-- `adb`
-
-そのため、Supabase Edge Function の deploy や Android 実機接続は、次のどちらかで進めます。
-
-- Android Studio / Supabase CLI をこのPCに入れてから実行する
-- 会社PCなど、すでに CLI と実機接続環境があるPCで実行する
-
-Expo の設定確認は `npx expo config --type public` で通っています。
+7. カレンダーで日付ごとの記録を確認
+8. 分析画面で基本分析を確認
+9. 通信オフまたは Supabase 未設定時に local-first で壊れないこと
 
 ## 公開判断
 
 公開してよい目安:
 
-- typecheck / test / lint が通っている
+- lint / typecheck / test / build:web が通っている
 - Android 実機で主要導線が落ちない
-- Supabase 保存と写真保存が本番環境で動く
-- AI 要約の失敗時にも記録機能が使える
-- プライバシーポリシーとストア説明で、クラウド保存と AI 処理を説明できている
+- Supabase 保存と写真保存が本番相当環境で動く
+- AI要約とインポート / エクスポートの導線が見えていない
+- プライバシーポリシーとストア説明で、クラウド保存と扱うデータを説明できている
 
 まだ出さない方がよい状態:
 
 - 同期失敗時に記録が消えたように見える
-- AI 要約が失敗したときの表示が分かりにくい
-- 写真付き記録の保存や削除でクラウド側にゴミが残る
+- 同じ日に複数件保存できてしまう
+- 写真付き記録の保存や削除でクラウド側に不要なデータが残る
 - ストア申告と実際のデータ利用がずれている
