@@ -63,11 +63,7 @@ export default function RecordHomeScreen() {
           <Pressable
             testID="home-start-review-button"
             style={styles.primaryButton}
-            onPress={() =>
-              todayReview
-                ? router.push({ pathname: '/entry', params: { reviewId: todayReview.id } })
-                : router.push('/templates')
-            }
+            onPress={() => router.push('/templates')}
           >
             <Text style={styles.primaryButtonText}>
               {recordedToday ? t('home.addAnother') : t('home.startReview')}

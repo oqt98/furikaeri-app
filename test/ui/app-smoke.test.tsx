@@ -131,6 +131,22 @@ describe('app smoke', () => {
     });
   });
 
+  it('starts a new record from home even when today already has a review', async () => {
+    const today = new Date().toISOString();
+    await saveReview(createReview({ createdAt: today, updatedAt: today }));
+    const result = renderRouter('./app', { initialUrl: '/' });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('screen-home')).toBeOnTheScreen();
+    });
+
+    fireEvent.press(screen.getByTestId('home-start-review-button'));
+
+    await waitFor(() => {
+      expect(result.getPathname()).toBe('/templates');
+    });
+  });
+
   it('shows a recent record in history when data exists', async () => {
     await saveReview(createReview());
     renderRouter('./app', { initialUrl: '/history' });
