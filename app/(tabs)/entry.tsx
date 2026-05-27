@@ -20,6 +20,10 @@ import { useAppTheme } from '../../lib/theme-context';
 import { createCardShadow } from '../../lib/theme';
 
 const MEMO_FIELD_KEY = 'memo';
+const PRIMARY_FIELD_BY_TEMPLATE: Record<string, string> = {
+  diary: 'title',
+  memo: MEMO_FIELD_KEY,
+};
 const WEEK_LABELS = ['日', '月', '火', '水', '木', '金', '土'];
 
 type TagCatalogState = {
@@ -73,7 +77,9 @@ export default function EntryScreen() {
   const skipLeaveGuardRef = useRef(false);
 
   const selectedTemplate = templates.find((item) => item.id === selectedTemplateId) ?? templates[0];
+  const primaryField = getPrimaryField(selectedTemplate.id);
   const visibleTemplateFields = getVisibleTemplateFields(selectedTemplate.id);
+  const selectedMoodOption = MOOD_DISPLAY_OPTIONS.find((option) => option.value === mood) ?? MOOD_DISPLAY_OPTIONS[2];
   const currentSnapshot = useMemo(() => JSON.stringify({ templateId: selectedTemplateId, selectedDateKey, category, mood, answers, actionTagIds, stateTagIds, photos } satisfies Snapshot), [selectedTemplateId, selectedDateKey, category, mood, answers, actionTagIds, stateTagIds, photos]);
   const hasUnsavedChanges = !isLoading && isDraftReady && currentSnapshot !== initialSnapshotRef.current;
   const calendarCells = useMemo(() => buildCalendarCells(calendarMonth), [calendarMonth]);
@@ -283,23 +289,39 @@ export default function EntryScreen() {
       <BackHeader title={isEditMode ? '記録を編集' : '記録を作成'} subtitle="無理なく振り返れる形で、今日の記録を残しましょう。" />
 
       <ChoiceSection title="気分" styles={styles}>
-        <View style={styles.choiceWrap}>
+        <View style={styles.moodRow}>
           {MOOD_DISPLAY_OPTIONS.map((option) => {
             const active = mood === option.value;
             return (
-              <Pressable key={option.value} style={[styles.moodChip, active && styles.choiceChipActive]} onPress={() => setMood(option.value)}>
+              <Pressable
+                key={option.value}
+                accessibilityLabel={option.label}
+                style={[styles.moodChip, active && styles.choiceChipActive]}
+                onPress={() => setMood(option.value)}
+              >
                 <Text style={styles.moodEmoji}>{option.emoji}</Text>
-                <Text style={[styles.choiceChipText, active && styles.choiceChipTextActive]}>{option.label}</Text>
               </Pressable>
             );
           })}
         </View>
+        <Text style={styles.selectedMoodText}>{selectedMoodOption.label}</Text>
       </ChoiceSection>
 
-      <View style={styles.sectionCard}>
-        <Text style={styles.sectionLabel}>ひとこと</Text>
-        <TextInput testID="entry-memo-input" style={styles.memoInput} multiline textAlignVertical="top" placeholder="今日のひとことを自由に書いてください" placeholderTextColor={theme.colors.textSoft} value={answers[MEMO_FIELD_KEY] ?? ''} onChangeText={(text) => setAnswers((prev) => ({ ...prev, [MEMO_FIELD_KEY]: text }))} />
-      </View>
+      {primaryField ? (
+        <View style={styles.sectionCard}>
+          <Text style={styles.sectionLabel}>{primaryField.label}</Text>
+          <TextInput
+            testID={primaryField.key === MEMO_FIELD_KEY ? 'entry-memo-input' : 'entry-primary-input'}
+            style={styles.memoInput}
+            multiline
+            textAlignVertical="top"
+            placeholder={`${primaryField.label}を入力`}
+            placeholderTextColor={theme.colors.textSoft}
+            value={answers[primaryField.key] ?? ''}
+            onChangeText={(text) => setAnswers((prev) => ({ ...prev, [primaryField.key]: text }))}
+          />
+        </View>
+      ) : null}
 
       <DisclosureSection
         title="記録の設定"
@@ -451,14 +473,23 @@ export function shouldShowMemoField(templateId: string) {
   return template.fields.some((field) => field.key === MEMO_FIELD_KEY);
 }
 
+export function getPrimaryField(templateId: string) {
+  const template = templates.find((item) => item.id === templateId) ?? templates[0];
+  const primaryKey = PRIMARY_FIELD_BY_TEMPLATE[template.id];
+  if (!primaryKey) return null;
+  return template.fields.find((field) => field.key === primaryKey) ?? null;
+}
+
 export function getVisibleTemplateFields(templateId: string) {
   const template = templates.find((item) => item.id === templateId) ?? templates[0];
-  return template.fields.filter((field) => field.key !== MEMO_FIELD_KEY);
+  const primaryKey = PRIMARY_FIELD_BY_TEMPLATE[template.id];
+  return template.fields.filter((field) => field.key !== primaryKey);
 }
 
 export function getAnswersForSave(currentAnswers: Record<string, string>, templateId: string) {
   const allowedKeys = new Set(getVisibleTemplateFields(templateId).map((field) => field.key));
-  allowedKeys.add(MEMO_FIELD_KEY);
+  const primaryField = getPrimaryField(templateId);
+  if (primaryField) allowedKeys.add(primaryField.key);
   return Object.fromEntries(Object.entries(currentAnswers).filter(([key, value]) => allowedKeys.has(key) && typeof value === 'string'));
 }
 
@@ -511,8 +542,10 @@ function createStyles(theme: ReturnType<typeof useAppTheme>['theme']) {
     saturdayText: { color: '#3b82f6' },
     choiceWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: theme.spacing.sm },
     choiceChip: { borderRadius: theme.radius.pill, borderWidth: 1, borderColor: theme.colors.border, backgroundColor: theme.colors.surfaceMuted, paddingHorizontal: theme.spacing.md, paddingVertical: 10 },
-    moodChip: { minWidth: 104, alignItems: 'center', borderRadius: theme.radius.lg, borderWidth: 1, borderColor: theme.colors.border, backgroundColor: theme.colors.surfaceMuted, paddingHorizontal: theme.spacing.md, paddingVertical: 12 },
-    moodEmoji: { fontSize: 20, marginBottom: 4 },
+    moodRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: theme.spacing.xs },
+    moodChip: { width: 46, height: 46, alignItems: 'center', justifyContent: 'center', borderRadius: theme.radius.pill, borderWidth: 1, borderColor: theme.colors.border, backgroundColor: theme.colors.surfaceMuted },
+    moodEmoji: { fontSize: 22 },
+    selectedMoodText: { ...theme.typography.caption, color: theme.colors.primaryDark, textAlign: 'center', marginTop: theme.spacing.sm, fontWeight: '700' },
     choiceChipActive: { backgroundColor: theme.colors.primary, borderColor: theme.colors.primary },
     choiceChipText: { ...theme.typography.caption, color: theme.colors.textMuted },
     choiceChipTextActive: { color: theme.colors.white },

@@ -5,6 +5,7 @@ import {
 } from '../app/(tabs)/calendar';
 import {
   getAnswersForSave,
+  getPrimaryField,
   getVisibleTemplateFields,
   shouldShowMemoField,
 } from '../app/(tabs)/entry';
@@ -15,10 +16,14 @@ beforeEach(async () => {
 });
 
 describe('entry and calendar regressions', () => {
-  it('keeps one-line memo available while filtering template-only answers', () => {
+  it('uses a primary field only for quick templates and filters template-only answers', () => {
     expect(shouldShowMemoField('memo')).toBe(true);
     expect(shouldShowMemoField('kpt')).toBe(false);
+    expect(getPrimaryField('memo')?.key).toBe('memo');
+    expect(getPrimaryField('diary')?.label).toBe('出来事');
+    expect(getPrimaryField('kpt')).toBeNull();
     expect(getVisibleTemplateFields('memo')).toHaveLength(0);
+    expect(getVisibleTemplateFields('diary')).toHaveLength(0);
     expect(getVisibleTemplateFields('kpt').map((field) => field.key)).toEqual([
       'keep',
       'problem',
@@ -30,21 +35,19 @@ describe('entry and calendar regressions', () => {
         'kpt'
       )
     ).toEqual({
-      memo: 'hidden',
       keep: 'keep',
       problem: 'problem',
     });
   });
 
-  it('renders the quick memo field and keeps template questions collapsed initially', async () => {
+  it('does not render the quick memo field for a non-memo template', async () => {
     renderRouter('./app', { initialUrl: '/entry?templateId=kpt' });
 
     await waitFor(() => {
-      expect(screen.getByTestId('entry-memo-input')).toBeOnTheScreen();
+      expect(screen.getByText('KPTで詳しく振り返る')).toBeOnTheScreen();
     });
 
-    expect(screen.getByText('ひとこと')).toBeOnTheScreen();
-    expect(screen.getByText('KPTで詳しく振り返る')).toBeOnTheScreen();
+    expect(screen.queryByTestId('entry-memo-input')).toBeNull();
     expect(screen.queryByText('Keep')).toBeNull();
   });
 
