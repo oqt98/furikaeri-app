@@ -1,47 +1,41 @@
-import { router } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import { setOnboardingCompleted } from '../lib/preferences';
 import { useAppTheme } from '../lib/theme-context';
 import { brand, createCardShadow } from '../lib/theme';
-
-const STEPS = [
-  {
-    title: 'このアプリでできること',
-    body: '毎日のふりかえりを短く残して、あとから見返しやすくするためのアプリです。気軽に続けられることを大切にしています。',
-  },
-  {
-    title: '入力はできるだけ軽く',
-    body: '気分やタグを先に選んで、必要なぶんだけメモを書けます。長文を毎日求めないので、忙しい日でも続けやすい設計です。',
-  },
-  {
-    title: '見返しやすさも重視',
-    body: '記録、履歴、カレンダー、分析の4つから、その日の記録も過去の流れもすぐ確認できます。まずは1日分から始めてみましょう。',
-  },
-];
 
 const SWIPE_DISTANCE = 64;
 
 export default function OnboardingScreen() {
-  const { theme } = useAppTheme();
+  const { theme, t, completeOnboarding } = useAppTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
   const [stepIndex, setStepIndex] = useState(0);
-  const step = STEPS[stepIndex];
-  const isFirst = stepIndex === 0;
-  const isLast = stepIndex === STEPS.length - 1;
 
-  const complete = async () => {
-    await setOnboardingCompleted(true);
-    router.replace('/(tabs)');
-  };
+  const steps = [
+    {
+      title: t('onboarding.step1.title'),
+      body: t('onboarding.step1.body'),
+    },
+    {
+      title: t('onboarding.step2.title'),
+      body: t('onboarding.step2.body'),
+    },
+    {
+      title: t('onboarding.step3.title'),
+      body: t('onboarding.step3.body'),
+    },
+  ];
+
+  const step = steps[stepIndex];
+  const isFirst = stepIndex === 0;
+  const isLast = stepIndex === steps.length - 1;
 
   const goNext = () => {
     if (isLast) {
-      void complete();
+      void completeOnboarding();
       return;
     }
-    setStepIndex((current) => Math.min(current + 1, STEPS.length - 1));
+    setStepIndex((current) => Math.min(current + 1, steps.length - 1));
   };
 
   const goBack = () => {
@@ -73,7 +67,7 @@ export default function OnboardingScreen() {
           <Text style={styles.body}>{step.body}</Text>
 
           <View style={styles.progressRow}>
-            {STEPS.map((_, index) => (
+            {steps.map((_, index) => (
               <View
                 key={index}
                 style={[styles.progressDot, index === stepIndex && styles.progressDotActive]}
@@ -82,8 +76,13 @@ export default function OnboardingScreen() {
           </View>
 
           <View style={styles.buttonGroup}>
-            <Pressable style={styles.secondaryButton} onPress={() => void complete()}>
-              <Text style={styles.secondaryButtonText}>スキップ</Text>
+            <Pressable
+              style={styles.secondaryButton}
+              onPress={() => {
+                void completeOnboarding();
+              }}
+            >
+              <Text style={styles.secondaryButtonText}>{t('onboarding.skip')}</Text>
             </Pressable>
 
             <Pressable
@@ -97,12 +96,14 @@ export default function OnboardingScreen() {
                   isFirst && styles.ghostButtonTextDisabled,
                 ]}
               >
-                戻る
+                {t('onboarding.back')}
               </Text>
             </Pressable>
 
             <Pressable style={styles.primaryButton} onPress={goNext}>
-              <Text style={styles.primaryButtonText}>{isLast ? 'はじめる' : '次へ'}</Text>
+              <Text style={styles.primaryButtonText}>
+                {isLast ? t('onboarding.finish') : t('onboarding.next')}
+              </Text>
             </Pressable>
           </View>
         </View>

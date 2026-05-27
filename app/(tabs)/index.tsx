@@ -13,13 +13,14 @@ import {
 } from '../../lib/importantDays';
 import { getImportantDayMarker } from '../../lib/importantDayIcons';
 import { buildInsightSummary } from '../../lib/insights';
-import { getReviews, type ReviewItem } from '../../lib/storage';
+import { reviewRepository } from '../../lib/reviewRepository';
+import type { ReviewItem } from '../../lib/storage';
 import { useAppTheme } from '../../lib/theme-context';
 import { brand, createCardShadow } from '../../lib/theme';
 
 export default function RecordHomeScreen() {
   const router = useRouter();
-  const { theme } = useAppTheme();
+  const { theme, t, localeTag } = useAppTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
   const [reviews, setReviews] = useState<ReviewItem[]>([]);
   const [importantDays, setImportantDays] = useState<ImportantDay[]>([]);
@@ -27,7 +28,7 @@ export default function RecordHomeScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      void Promise.all([getReviews(), getImportantDays()]).then(
+      void Promise.all([reviewRepository.list(), getImportantDays()]).then(
         ([nextReviews, nextImportantDays]) => {
           setReviews(nextReviews);
           setImportantDays(nextImportantDays);
@@ -40,78 +41,84 @@ export default function RecordHomeScreen() {
   const latestMood = latestReview?.mood ? getMoodOption(latestReview.mood) : null;
   const insight = useMemo(() => buildInsightSummary(reviews), [reviews]);
   const nextImportantDay = importantDays[0];
-  const recordedToday = reviews.some((item) => isToday(item.createdAt));
+  const todayReview = reviews.find((item) => isToday(item.createdAt)) ?? null;
+  const recordedToday = Boolean(todayReview);
 
   return (
     <SwipeTabPage tabKey="index">
       <ScrollView testID="screen-home" contentContainerStyle={styles.container}>
         <AppHeader
-          title="記録"
-          subtitle="迷わず書けて、あとから見返しやすく。"
+          title={t('home.title')}
+          subtitle={t('home.subtitle')}
           onOpenMenu={() => setIsMenuVisible(true)}
         />
 
         <View style={styles.heroCard}>
           <Text style={styles.brand}>{brand.name}</Text>
           <Text style={styles.heroTitle}>
-            {recordedToday ? '今日はもう書けています' : '今日のふりかえりを始めましょう'}
+            {recordedToday ? t('home.heroRecorded') : t('home.heroPending')}
           </Text>
-          <Text style={styles.heroText}>
-            長く書かなくても大丈夫です。ひとことでも、気分だけでも、今日を残せます。
-          </Text>
+          <Text style={styles.heroText}>{t('home.heroBody')}</Text>
 
           <Pressable
             testID="home-start-review-button"
             style={styles.primaryButton}
-            onPress={() => router.push('/templates')}
+            onPress={() =>
+              todayReview
+                ? router.push({ pathname: '/entry', params: { reviewId: todayReview.id } })
+                : router.push('/templates')
+            }
           >
             <Text style={styles.primaryButtonText}>
-              {recordedToday ? 'もう一度見直す / 追加する' : '記録をはじめる'}
+              {recordedToday ? t('home.addAnother') : t('home.startReview')}
             </Text>
           </Pressable>
 
           <View style={styles.helperRow}>
-            <HintChip icon="time-outline" label="1〜3分で記録" />
-            <HintChip icon="albums-outline" label="履歴から見返せる" />
+            <HintChip icon="time-outline" label={t('home.hintQuick')} />
+            <HintChip icon="albums-outline" label={t('home.hintReview')} />
           </View>
         </View>
 
         <View style={styles.grid}>
           <View style={styles.summaryCard}>
-            <Text style={styles.cardLabel}>最近の記録</Text>
+            <Text style={styles.cardLabel}>{t('home.latest')}</Text>
             {latestReview ? (
               <>
                 <Text style={styles.cardTitle}>{latestReview.templateName}</Text>
                 <Text style={styles.cardBody}>
-                  {new Date(latestReview.createdAt).toLocaleDateString('ja-JP')}
+                  {new Date(latestReview.createdAt).toLocaleDateString(localeTag)}
                   {latestMood ? ` ・ ${latestMood.emoji} ${latestMood.label}` : ''}
                 </Text>
               </>
             ) : (
-              <Text style={styles.cardBody}>まだ記録がありません。最初の1件を残してみましょう。</Text>
+              <Text style={styles.cardBody}>{t('home.latestEmpty')}</Text>
             )}
           </View>
 
           <View style={styles.summaryCard}>
-            <Text style={styles.cardLabel}>次に近い大切な日</Text>
+            <Text style={styles.cardLabel}>{t('home.nextImportantDay')}</Text>
             {nextImportantDay ? (
               <>
                 <View style={styles.importantDayTitleRow}>
-                  <Text style={styles.importantDayMarker}>{getImportantDayMarker(nextImportantDay)}</Text>
+                  <Text style={styles.importantDayMarker}>
+                    {getImportantDayMarker(nextImportantDay)}
+                  </Text>
                   <Text style={styles.cardTitle}>{nextImportantDay.name}</Text>
                 </View>
                 <Text style={styles.cardBody}>
-                  {nextImportantDay.type} ・ {formatImportantDayCountdown(nextImportantDay.date)}
+                  {nextImportantDay.type} ・{' '}
+                  {formatImportantDayCountdown(nextImportantDay.date)}
                 </Text>
               </>
             ) : (
-              <Text style={styles.cardBody}>必要になったときだけ、サイドメニューから登録できます。</Text>
+              <Text style={styles.cardBody}>{t('home.nextImportantDayEmpty')}</Text>
             )}
           </View>
         </View>
 
         <View style={styles.noteCard}>
-          <Text style={styles.cardLabel}>今週のひとこと</Text>
+          <Text style={styles.cardLabel}>{t('home.weeklyNote')}</Text>
           <Text style={styles.noteTitle}>{insight.weeklyTitle}</Text>
           <Text style={styles.noteBody}>{insight.weeklyBody}</Text>
         </View>

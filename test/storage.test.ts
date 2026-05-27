@@ -2,10 +2,13 @@ import asyncStorage from './async-storage-mock.cjs';
 import {
   createTag,
   deleteTag,
+  DuplicateReviewDateError,
   getReviews,
   getTagCatalog,
   getTemplateOrder,
   importReviews,
+  replaceAllReviews,
+  replaceTagCatalog,
   reorderTags,
   saveReview,
 } from '../lib/storage';
@@ -65,7 +68,7 @@ describe('lib/storage', () => {
     expect(reviews[0].isFavorite).toBe(false);
   });
 
-  it('saveReview stores normalized records and keeps multiple entries for the same date', async () => {
+  it('saveReview stores normalized records and blocks duplicate dates while allowing other dates', async () => {
     await saveReview(
       createReview({
         actionTagIds: ['action-reading', 'action-reading'],
@@ -86,19 +89,33 @@ describe('lib/storage', () => {
       { id: 'photo-2', order: 1 },
     ]);
 
+    let duplicateError: unknown = null;
+    try {
+      await saveReview(
+        createReview({
+          id: 'review-2',
+          createdAt: '2026-04-06T22:30:00',
+        })
+      );
+    } catch (error) {
+      duplicateError = error;
+    }
+
+    expect(duplicateError instanceof DuplicateReviewDateError).toBe(true);
+
     await saveReview(
       createReview({
-        id: 'review-2',
-        createdAt: '2026-04-06T22:30:00',
+        id: 'review-3',
+        createdAt: '2026-04-07T08:00:00',
       })
     );
 
     const nextSaved = await getReviews();
     expect(nextSaved).toHaveLength(2);
-    expect(nextSaved.map((item) => item.id)).toEqual(['review-2', 'review-1']);
+    expect(nextSaved.map((item) => item.id)).toEqual(['review-3', 'review-1']);
   });
 
-  it('importReviews imports valid rows, skips invalid duplicates, and creates missing tags', async () => {
+  it('importReviews imports valid rows, skips invalid rows and duplicate dates, and creates missing tags', async () => {
     await asyncStorage.setItem(
       'furikaeri-tag-catalog',
       JSON.stringify({
@@ -130,6 +147,8 @@ describe('lib/storage', () => {
         actionTags: ['集中', '新しいタグ'],
         stateTags: ['疲れた'],
         answers: { note: 'imported' },
+        importSource: 'notion-import',
+        importFingerprint: 'fp-new',
       },
       {
         sourceRowNumber: 2,
@@ -137,13 +156,17 @@ describe('lib/storage', () => {
         category: CATEGORIES[0],
         templateName: 'invalid',
         answers: {},
+        importSource: 'notion-import',
+        importFingerprint: 'fp-invalid',
       },
       {
         sourceRowNumber: 3,
         createdAt: '2026-04-01T19:00:00',
         category: CATEGORIES[0],
-        templateName: 'duplicate-existing',
+        templateName: 'same-day-existing',
         answers: {},
+        importSource: 'notion-import',
+        importFingerprint: 'fp-same-day',
       },
       {
         sourceRowNumber: 4,
@@ -151,6 +174,8 @@ describe('lib/storage', () => {
         category: CATEGORIES[0],
         templateName: 'duplicate-in-file',
         answers: {},
+        importSource: 'notion-import',
+        importFingerprint: 'fp-new',
       },
     ]);
 
@@ -162,6 +187,7 @@ describe('lib/storage', () => {
     expect(reviews[0].templateName).toBe('CSV取り込み');
     expect(reviews[0].actionTagIds).toHaveLength(2);
     expect(reviews[0].stateTagIds).toHaveLength(1);
+    expect(reviews[0].importFingerprint).toBe('fp-new');
 
     const tagCatalog = await getTagCatalog();
     const focusTag = tagCatalog.action.find((tag) => tag.id === 'action-focus');
@@ -231,5 +257,41 @@ describe('lib/storage', () => {
 
     tagCatalog = await getTagCatalog();
     expect(tagCatalog.action.find((tag) => tag.id === 'action-reading')).toBeFalsy();
+  });
+
+  it('replaceAllReviews rewrites the local cache in createdAt order', async () => {
+    await replaceAllReviews([
+      createReview({
+        id: 'review-older',
+        createdAt: '2026-04-01T08:00:00.000Z',
+      }),
+      createReview({
+        id: 'review-newer',
+        createdAt: '2026-04-08T08:00:00.000Z',
+      }),
+    ]);
+
+    const reviews = await getReviews();
+    expect(reviews.map((item) => item.id)).toEqual(['review-newer', 'review-older']);
+  });
+
+  it('replaceTagCatalog rewrites the local tag catalog', async () => {
+    await replaceTagCatalog({
+      action: [
+        {
+          id: 'action-remote',
+          label: '遠隔同期',
+          type: 'action',
+          isArchived: false,
+          createdAt: '2026-04-01T00:00:00.000Z',
+        },
+      ],
+      state: [],
+    });
+
+    const catalog = await getTagCatalog();
+    expect(catalog.action.find((item) => item.id === 'action-remote')?.label).toBe(
+      '遠隔同期'
+    );
   });
 });

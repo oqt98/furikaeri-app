@@ -1,8 +1,8 @@
 import { fireEvent, renderRouter, screen, waitFor } from 'expo-router/testing-library';
 import asyncStorage from '../async-storage-mock.cjs';
-import { saveReview } from '../../lib/storage';
 import { CATEGORIES } from '../../data/reviewOptions';
 import { templates } from '../../data/templates';
+import { saveReview } from '../../lib/storage';
 
 function createReview(overrides: Partial<Parameters<typeof saveReview>[0]> = {}) {
   return {
@@ -52,6 +52,15 @@ describe('app smoke', () => {
     });
   });
 
+  it('renders the settings screen and import entrypoint', async () => {
+    renderRouter('./app', { initialUrl: '/settings' });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('settings-import-button')).toBeOnTheScreen();
+    });
+    expect(screen.getByText(/CSV Import|Notion CSV Import/)).toBeOnTheScreen();
+  });
+
   it('opens the side menu and navigates to the important days screen', async () => {
     const result = renderRouter('./app', { initialUrl: '/' });
 
@@ -59,11 +68,26 @@ describe('app smoke', () => {
       expect(screen.getByTestId('screen-home')).toBeOnTheScreen();
     });
 
-    fireEvent.press(screen.getByLabelText('メニューを開く'));
-    fireEvent.press(screen.getAllByText('大切な日')[0]);
+    fireEvent.press(screen.getByTestId('app-header-menu-button'));
+    fireEvent.press(screen.getByTestId('side-menu-menu.importantDays'));
 
     await waitFor(() => {
       expect(result.getPathname()).toBe('/important-days');
+    });
+  });
+
+  it('opens the side menu and navigates to onboarding', async () => {
+    const result = renderRouter('./app', { initialUrl: '/' });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('screen-home')).toBeOnTheScreen();
+    });
+
+    fireEvent.press(screen.getByTestId('app-header-menu-button'));
+    fireEvent.press(screen.getByTestId('side-menu-menu.onboarding'));
+
+    await waitFor(() => {
+      expect(result.getPathname()).toBe('/onboarding');
     });
   });
 
@@ -104,6 +128,22 @@ describe('app smoke', () => {
 
     await waitFor(() => {
       expect(screen.getByText('テンプレートを選ぶ')).toBeOnTheScreen();
+    });
+  });
+
+  it('opens today’s existing record from home when today already has a review', async () => {
+    const today = new Date().toISOString();
+    await saveReview(createReview({ createdAt: today, updatedAt: today }));
+    const result = renderRouter('./app', { initialUrl: '/' });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('screen-home')).toBeOnTheScreen();
+    });
+
+    fireEvent.press(screen.getByTestId('home-start-review-button'));
+
+    await waitFor(() => {
+      expect(result.getPathname()).toBe('/entry');
     });
   });
 

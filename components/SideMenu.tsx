@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useRouter, type Href } from 'expo-router';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useAppTheme } from '../lib/theme-context';
 import { brand, createCardShadow, type ThemeName } from '../lib/theme';
@@ -10,16 +10,26 @@ type Props = {
 };
 
 const MENU_ITEMS = [
-  { label: 'テーマ', icon: 'color-palette-outline', route: '/theme' },
-  { label: '大切な日', icon: 'heart-outline', route: '/important-days' },
-  { label: '通知設定', icon: 'notifications-outline', route: '/notifications' },
-  { label: 'インポート / エクスポート', icon: 'swap-horizontal-outline', route: '/import-export' },
-  { label: 'このアプリについて', icon: 'information-circle-outline', route: '/about' },
+  { key: 'menu.theme', icon: 'color-palette-outline', route: '/theme' as Href },
+  { key: 'menu.language', icon: 'language-outline', route: '/language' as Href },
+  { key: 'menu.onboarding', icon: 'school-outline' },
+  { key: 'menu.importantDays', icon: 'heart-outline', route: '/important-days' as Href },
+  {
+    key: 'menu.notifications',
+    icon: 'notifications-outline',
+    route: '/notifications' as Href,
+  },
+  {
+    key: 'menu.importExport',
+    icon: 'swap-horizontal-outline',
+    route: '/import-export' as Href,
+  },
+  { key: 'menu.about', icon: 'information-circle-outline', route: '/about' as Href },
 ] as const;
 
 export default function SideMenu({ visible, onClose }: Props) {
   const router = useRouter();
-  const { theme, themeName } = useAppTheme();
+  const { theme, themeName, reopenOnboarding, t } = useAppTheme();
   const styles = createStyles(theme);
 
   return (
@@ -28,22 +38,30 @@ export default function SideMenu({ visible, onClose }: Props) {
         <Pressable style={styles.panel} onPress={() => undefined}>
           <View style={styles.brandBox}>
             <Text style={styles.brandName}>{brand.name}</Text>
-            <Text style={styles.brandSubtitle}>{brand.subtitle}</Text>
-            <Text style={styles.brandMeta}>現在のテーマ: {themeLabel(themeName)}</Text>
+            <Text style={styles.brandSubtitle}>{t('brand.subtitle')}</Text>
+            <Text style={styles.brandMeta}>
+              {t('common.currentTheme')}: {themeLabel(themeName, t)}
+            </Text>
           </View>
 
           {MENU_ITEMS.map((item) => (
             <Pressable
-              key={item.route}
+              key={item.key}
+              testID={`side-menu-${item.key}`}
               style={styles.menuItem}
               onPress={() => {
                 onClose();
+                if (item.key === 'menu.onboarding') {
+                  reopenOnboarding();
+                  return;
+                }
+
                 router.push(item.route);
               }}
             >
               <View style={styles.menuItemLeft}>
                 <Ionicons name={item.icon} size={18} color={theme.colors.primaryDark} />
-                <Text style={styles.menuLabel}>{item.label}</Text>
+                <Text style={styles.menuLabel}>{t(item.key)}</Text>
               </View>
               <Ionicons name="chevron-forward" size={18} color={theme.colors.textSoft} />
             </Pressable>
@@ -54,26 +72,29 @@ export default function SideMenu({ visible, onClose }: Props) {
   );
 }
 
-function themeLabel(themeName: ThemeName) {
+function themeLabel(
+  themeName: ThemeName,
+  t: ReturnType<typeof useAppTheme>['t']
+) {
   switch (themeName) {
     case 'light':
-      return 'ライト';
+      return t('theme.light.label');
     case 'warm':
-      return 'ウォーム';
+      return t('theme.warm.label');
     case 'rose':
-      return 'ローズ';
+      return t('theme.rose.label');
     case 'amber':
-      return 'アンバー';
+      return t('theme.amber.label');
     case 'green':
-      return 'グリーン';
+      return t('theme.green.label');
     case 'mint':
-      return 'ミント';
+      return t('theme.mint.label');
     case 'blue':
-      return 'ブルー';
+      return t('theme.blue.label');
     case 'navy':
-      return 'ネイビー';
+      return t('theme.navy.label');
     default:
-      return 'ライト';
+      return t('theme.light.label');
   }
 }
 

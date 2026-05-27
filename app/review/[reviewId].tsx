@@ -3,7 +3,9 @@ import { useEffect, useMemo, useState } from 'react';
 import { Image, ScrollView, StyleSheet, Text, View } from 'react-native';
 import BackHeader from '../../components/BackHeader';
 import { getMoodOption } from '../../data/reviewOptions';
-import { getReviewById, getTagCatalog, type ReviewItem } from '../../lib/storage';
+import { reviewRepository } from '../../lib/reviewRepository';
+import { tagRepository } from '../../lib/tagRepository';
+import type { ReviewItem } from '../../lib/storage';
 import { useAppTheme } from '../../lib/theme-context';
 import { createCardShadow } from '../../lib/theme';
 
@@ -17,7 +19,7 @@ export default function ReviewDetailScreen() {
   useEffect(() => {
     let active = true;
 
-    void Promise.all([getReviewById(reviewId), getTagCatalog()]).then(([item, catalog]) => {
+    void Promise.all([reviewRepository.getById(reviewId), tagRepository.getCatalog()]).then(([item, catalog]) => {
       if (!active) return;
       setReview(item);
       setTagLabelMap(new Map([...catalog.action, ...catalog.state].map((tag) => [tag.id, tag.label])));

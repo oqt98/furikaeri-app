@@ -18,13 +18,9 @@ import {
   type ImportantDay,
 } from '../../lib/importantDays';
 import { getImportantDayMarker } from '../../lib/importantDayIcons';
-import {
-  deleteReview,
-  getReviews,
-  getTagCatalog,
-  toggleFavoriteReview,
-  type ReviewItem,
-} from '../../lib/storage';
+import { reviewRepository } from '../../lib/reviewRepository';
+import { tagRepository } from '../../lib/tagRepository';
+import type { ReviewItem } from '../../lib/storage';
 import { useAppTheme } from '../../lib/theme-context';
 import { createCardShadow, getTheme } from '../../lib/theme';
 
@@ -35,11 +31,13 @@ type CalendarCell = {
   isCurrentMonth: boolean;
 };
 
-const WEEK_LABELS = ['日', '月', '火', '水', '木', '金', '土'];
-
 export default function CalendarScreen() {
-  const { theme } = useAppTheme();
+  const { theme, t, locale, localeTag } = useAppTheme();
   const styles = useMemo(() => createCalendarStyles(theme), [theme]);
+  const weekLabels = useMemo(
+    () => (locale === 'en' ? ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] : ['日', '月', '火', '水', '木', '金', '土']),
+    [locale]
+  );
   const [reviews, setReviews] = useState<ReviewItem[]>([]);
   const [importantDays, setImportantDays] = useState<ImportantDay[]>([]);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -53,8 +51,8 @@ export default function CalendarScreen() {
 
   const loadData = useCallback(async () => {
     const [data, tagCatalog, importantDayList] = await Promise.all([
-      getReviews(),
-      getTagCatalog(),
+      reviewRepository.list(),
+      tagRepository.getCatalog(),
       getImportantDays(),
     ]);
     setReviews(data);
@@ -97,6 +95,15 @@ export default function CalendarScreen() {
   );
 
   const handleCreate = () => {
+    const existingReview = (reviewsByDate[selectedDateKey] ?? [])[0];
+    if (existingReview) {
+      router.push({
+        pathname: '/entry',
+        params: { reviewId: existingReview.id },
+      });
+      return;
+    }
+
     router.push({
       pathname: '/templates',
       params: { date: selectedDateKey },
@@ -113,11 +120,11 @@ export default function CalendarScreen() {
   const handleDelete = async (id: string) => {
     try {
       setDeletingId(id);
-      await deleteReview(id);
+      await reviewRepository.remove(id);
       await loadData();
     } catch (error) {
       console.error(error);
-      Alert.alert('削除に失敗しました');
+      Alert.alert(t('calendar.deleteError'));
     } finally {
       setDeletingId(null);
     }
@@ -126,11 +133,11 @@ export default function CalendarScreen() {
   const handleFavorite = async (item: ReviewItem) => {
     try {
       setFavoriteLoadingId(item.id);
-      await toggleFavoriteReview(item.id);
+      await reviewRepository.toggleFavorite(item.id);
       await loadData();
     } catch (error) {
       console.error(error);
-      Alert.alert('お気に入りの更新に失敗しました');
+      Alert.alert(t('calendar.favoriteUpdateError'));
     } finally {
       setFavoriteLoadingId(null);
     }
@@ -142,10 +149,8 @@ export default function CalendarScreen() {
         testID="screen-calendar"
         contentContainerStyle={styles.container}
       >
-        <Text style={styles.title}>カレンダー</Text>
-        <Text style={styles.subtitle}>
-          日付ごとに記録と大切な日をまとめて見返せます。
-        </Text>
+        <Text style={styles.title}>{t('calendar.title')}</Text>
+        <Text style={styles.subtitle}>{t('calendar.subtitle')}</Text>
 
         <View style={styles.monthCard}>
           <Pressable
@@ -159,9 +164,12 @@ export default function CalendarScreen() {
 
           <View style={styles.monthHeaderText}>
             <Text style={styles.monthLabel}>
-              {currentMonth.getFullYear()}年 {currentMonth.getMonth() + 1}月
+              {currentMonth.toLocaleDateString(localeTag, {
+                year: 'numeric',
+                month: 'long',
+              })}
             </Text>
-            <Text style={styles.monthCaption}>記録数と大切な日を日付ごとに表示します</Text>
+            <Text style={styles.monthCaption}>{t('calendar.monthCaption')}</Text>
           </View>
 
           <Pressable
@@ -172,7 +180,7 @@ export default function CalendarScreen() {
               setSelectedDateKey(toDateKey(today));
             }}
           >
-            <Text style={styles.todayButtonText}>今日</Text>
+            <Text style={styles.todayButtonText}>{t('common.today')}</Text>
           </Pressable>
 
           <Pressable
@@ -187,7 +195,7 @@ export default function CalendarScreen() {
 
         <View style={styles.calendarCard}>
           <View style={styles.weekRow}>
-            {WEEK_LABELS.map((label, index) => (
+            {weekLabels.map((label, index) => (
               <View key={label} style={styles.weekCell}>
                 <Text style={[styles.weekLabel, index === 0 && styles.sundayText, index === 6 && styles.saturdayText]}>{label}</Text>
               </View>
@@ -257,9 +265,6 @@ export default function CalendarScreen() {
                   >
                     {cell.day}
                   </Text>
-                  <Text style={[styles.dayCount, selected && styles.dayCountSelected]}>
-                    {count > 0 ? count : ' '}
-                  </Text>
                 </Pressable>
               );
             })}
@@ -268,19 +273,19 @@ export default function CalendarScreen() {
 
         <View style={styles.sectionHeader}>
           <View>
-            <Text style={styles.sectionLabel}>選択中の日付</Text>
-            <Text style={styles.sectionTitle}>{formatDateLabel(selectedDateKey)}</Text>
+            <Text style={styles.sectionLabel}>{t('calendar.selectedDate')}</Text>
+            <Text style={styles.sectionTitle}>{formatDateLabel(selectedDateKey, locale)}</Text>
           </View>
 
           <Pressable testID="calendar-create-button" style={styles.createButton} onPress={handleCreate}>
             <Ionicons name="add" size={16} color={theme.colors.white} />
-            <Text style={styles.createButtonText}>この日に記録</Text>
+            <Text style={styles.createButtonText}>{t('calendar.recordForThisDay')}</Text>
           </Pressable>
         </View>
 
         {selectedImportantDays.length > 0 ? (
           <View style={styles.importantDaysCard}>
-            <Text style={styles.importantDaysTitle}>大切な日</Text>
+            <Text style={styles.importantDaysTitle}>{t('calendar.importantDays')}</Text>
             {selectedImportantDays.map((item) => (
               <View key={item.id} style={styles.importantDayRow}>
                 <View style={styles.importantDayBadge}>
@@ -300,10 +305,8 @@ export default function CalendarScreen() {
 
         {selectedReviews.length === 0 ? (
           <View style={styles.emptyCard}>
-            <Text style={styles.emptyTitle}>この日の記録はまだありません</Text>
-            <Text style={styles.emptyText}>
-              テンプレートを選んで、その日のことを残せます。
-            </Text>
+            <Text style={styles.emptyTitle}>{t('calendar.emptyTitle')}</Text>
+            <Text style={styles.emptyText}>{t('calendar.emptyBody')}</Text>
           </View>
         ) : (
           selectedReviews.map((item) => {
@@ -321,7 +324,7 @@ export default function CalendarScreen() {
                   <View style={styles.reviewHeaderText}>
                     <Text style={styles.reviewTitle}>{item.templateName}</Text>
                     <Text style={styles.reviewDate}>
-                      {new Date(item.createdAt).toLocaleTimeString('ja-JP', {
+                      {new Date(item.createdAt).toLocaleTimeString(localeTag, {
                         hour: '2-digit',
                         minute: '2-digit',
                       })}
@@ -346,7 +349,7 @@ export default function CalendarScreen() {
                   {mood ? <Badge label={`${mood.emoji} ${mood.label}`} tone="muted" /> : null}
                 </View>
 
-                {stateTags ? <Text style={styles.stateSummary}>状態タグ: {stateTags}</Text> : null}
+                  {stateTags ? <Text style={styles.stateSummary}>{`${t('history.stateTags')}: ${stateTags}`}</Text> : null}
 
                 <View style={styles.answerBox}>
                   {Object.entries(item.answers ?? {})
@@ -362,18 +365,18 @@ export default function CalendarScreen() {
 
                 <View style={styles.actionRow}>
                   <Pressable style={styles.editButton} onPress={() => handleEdit(item)}>
-                    <Text style={styles.editButtonText}>編集</Text>
+                    <Text style={styles.editButtonText}>{t('common.edit')}</Text>
                   </Pressable>
                   <Pressable
                     style={[styles.deleteButton, isDeleting && styles.buttonDisabled]}
                     onPress={() =>
                       Alert.alert(
-                        'この記録を削除しますか？',
-                        `${item.templateName} を削除します。`,
+                        t('calendar.confirmDeleteTitle'),
+                        t('calendar.confirmDeleteBody', { name: item.templateName }),
                         [
-                          { text: 'キャンセル', style: 'cancel' },
+                          { text: locale === 'en' ? 'Cancel' : 'キャンセル', style: 'cancel' },
                           {
-                            text: '削除する',
+                            text: t('common.delete'),
                             style: 'destructive',
                             onPress: () => {
                               void handleDelete(item.id);
@@ -385,7 +388,7 @@ export default function CalendarScreen() {
                     disabled={isDeleting}
                   >
                     <Text style={styles.deleteButtonText}>
-                      {isDeleting ? '削除中...' : '削除'}
+                      {isDeleting ? t('common.loading') : t('common.delete')}
                     </Text>
                   </Pressable>
                 </View>
@@ -443,8 +446,15 @@ function toDateKey(date: Date) {
   return `${year}-${month}-${day}`;
 }
 
-function formatDateLabel(dateKey: string) {
+function formatDateLabel(dateKey: string, locale: 'ja' | 'en' = 'ja') {
   const [year, month, day] = dateKey.split('-');
+  if (locale === 'en') {
+    return new Date(`${dateKey}T00:00:00`).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    });
+  }
   return `${year}年${Number(month)}月${Number(day)}日`;
 }
 
@@ -604,15 +614,6 @@ export function createCalendarStyles(theme = getTheme('light')) {
     },
     saturdayText: {
       color: '#3b82f6',
-    },
-    dayCount: {
-      fontSize: 10,
-      fontWeight: '700',
-      color: theme.colors.primaryDark,
-      marginTop: 2,
-    },
-    dayCountSelected: {
-      color: theme.colors.white,
     },
     sectionHeader: {
       flexDirection: 'row',

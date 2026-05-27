@@ -16,14 +16,15 @@ export default function AppHeader({
   onOpenMenu,
   rightSlot,
 }: Props) {
-  const { theme } = useAppTheme();
+  const { theme, t } = useAppTheme();
   const styles = createStyles(theme);
 
   return (
     <View style={styles.header}>
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel="メニューを開く"
+        accessibilityLabel={t('common.openMenu')}
+        testID="app-header-menu-button"
         style={styles.menuButton}
         onPress={onOpenMenu}
       >

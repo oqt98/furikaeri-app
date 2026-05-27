@@ -11,6 +11,11 @@ import {
   type TagType,
 } from '../data/tags';
 import { templates } from '../data/templates';
+import {
+  createImportedReviewId,
+  createLocalId,
+  createLocalTagId,
+} from './localIds';
 import { toDateKey } from './reviewDate';
 
 const STORAGE_KEY = 'furikaeri-history';
@@ -33,6 +38,7 @@ export class DuplicateReviewDateError extends Error {
 export type ReviewPhoto = {
   id: string;
   uri: string;
+  storagePath?: string;
   comment: string;
   order: number;
 };
@@ -97,7 +103,7 @@ type LegacyReviewItem = {
   importFingerprint?: string;
 };
 
-type TagCatalog = Record<TagType, TagDefinition[]>;
+export type TagCatalog = Record<TagType, TagDefinition[]>;
 
 export async function getReviews(): Promise<ReviewItem[]> {
   try {
@@ -136,12 +142,31 @@ export async function getReviewByDateKey(
 }
 
 export async function saveReview(item: ReviewItem): Promise<void> {
+  const existingOnSameDate = await getReviewByDateKey(toDateKey(new Date(item.createdAt)), item.id);
+  if (existingOnSameDate) {
+    throw new DuplicateReviewDateError(
+      '同じ日付の記録は1件までです。',
+      existingOnSameDate.id
+    );
+  }
+
   const current = await getReviews();
   const next = [normalizeReviewForSave(item), ...current.filter((review) => review.id !== item.id)];
   await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(next.sort(sortReviewsByCreatedAtDesc)));
 }
 
 export async function updateReview(updatedItem: ReviewItem): Promise<void> {
+  const existingOnSameDate = await getReviewByDateKey(
+    toDateKey(new Date(updatedItem.createdAt)),
+    updatedItem.id
+  );
+  if (existingOnSameDate) {
+    throw new DuplicateReviewDateError(
+      '同じ日付の記録は1件までです。',
+      existingOnSameDate.id
+    );
+  }
+
   const current = await getReviews();
   const normalized = normalizeReviewForSave(updatedItem);
   const hasExisting = current.some((item) => item.id === updatedItem.id);
@@ -159,6 +184,14 @@ export async function deleteReview(id: string): Promise<void> {
 
 export async function clearAllReviews(): Promise<void> {
   await AsyncStorage.removeItem(STORAGE_KEY);
+}
+
+export async function replaceAllReviews(reviews: ReviewItem[]): Promise<void> {
+  const normalized = reviews.map((item) => normalizeReviewForSave(item));
+  await AsyncStorage.setItem(
+    STORAGE_KEY,
+    JSON.stringify(normalized.sort(sortReviewsByCreatedAtDesc))
+  );
 }
 
 export async function importReviews(
@@ -191,7 +224,7 @@ export async function importReviews(
 
       if (!existing) {
         existing = {
-          id: `${type}-${Date.now()}-${nextIds.length}`,
+          id: createLocalTagId(type),
           label: trimmed,
           type,
           isArchived: false,
@@ -269,7 +302,7 @@ export async function importReviews(
 
     accepted.push(
       normalizeReviewForSave({
-        id: `import-${Date.now()}-${index}`,
+        id: createImportedReviewId(),
         createdAt: createdAt.toISOString(),
         updatedAt: new Date().toISOString(),
         category: draft.category,
@@ -286,7 +319,7 @@ export async function importReviews(
       })
     );
     if (draft.importFingerprint) {
-      existingFingerprintMap.set(draft.importFingerprint, `import-${index}`);
+      existingFingerprintMap.set(draft.importFingerprint, accepted[accepted.length - 1].id);
     }
   });
 
@@ -364,6 +397,13 @@ export async function saveTagCatalog(catalog: TagCatalog): Promise<void> {
   await AsyncStorage.setItem(TAG_CATALOG_KEY, JSON.stringify(catalog));
 }
 
+export async function replaceTagCatalog(catalog: TagCatalog): Promise<void> {
+  await saveTagCatalog({
+    action: catalog.action.map((item) => ({ ...item })),
+    state: catalog.state.map((item) => ({ ...item })),
+  });
+}
+
 export async function createTag(
   type: TagType,
   label: string
@@ -385,7 +425,7 @@ export async function createTag(
   }
 
   const nextTag: TagDefinition = {
-    id: `${type}-${Date.now()}`,
+    id: createLocalTagId(type),
     label: trimmed,
     type,
     isArchived: false,
@@ -530,8 +570,12 @@ function normalizePhotos(
   return rawPhotos
     .filter((photo) => typeof photo.uri === 'string' && photo.uri.trim())
     .map((photo, index) => ({
-      id: photo.id ?? `photo-${index}-${Date.now()}`,
+      id: photo.id ?? createLocalId(`normalized-photo-${index}`),
       uri: photo.uri as string,
+      storagePath:
+        typeof (photo as ReviewPhoto).storagePath === 'string'
+          ? (photo as ReviewPhoto).storagePath
+          : undefined,
       comment: typeof photo.comment === 'string' ? photo.comment : '',
       order: typeof photo.order === 'number' ? photo.order : index,
     }))

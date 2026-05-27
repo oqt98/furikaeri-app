@@ -2,8 +2,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { Tabs, usePathname } from 'expo-router';
 import type { ComponentProps } from 'react';
 import { View } from 'react-native';
-import { confirmEntryLeave } from '../../lib/entryNavigationGuard';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { confirmEntryLeave } from '../../lib/entryNavigationGuard';
 import { useAppTheme } from '../../lib/theme-context';
 
 function TabIcon({
@@ -36,7 +36,7 @@ function TabIcon({
 }
 
 export default function TabsLayout() {
-  const { theme } = useAppTheme();
+  const { theme, t } = useAppTheme();
   const insets = useSafeAreaInsets();
   const pathname = usePathname();
 
@@ -75,7 +75,7 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: '記録',
+          title: t('tabs.index'),
           tabBarButtonTestID: 'tab-home',
           tabBarIcon: ({ color, size, focused }) => (
             <TabIcon
@@ -90,7 +90,7 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="history"
         options={{
-          title: '履歴',
+          title: t('tabs.history'),
           tabBarButtonTestID: 'tab-history',
           tabBarIcon: ({ color, size, focused }) => (
             <TabIcon
@@ -105,7 +105,7 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="calendar"
         options={{
-          title: 'カレンダー',
+          title: t('tabs.calendar'),
           tabBarButtonTestID: 'tab-calendar',
           tabBarIcon: ({ color, size, focused }) => (
             <TabIcon
@@ -120,7 +120,7 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="analytics"
         options={{
-          title: '分析',
+          title: t('tabs.analytics'),
           tabBarButtonTestID: 'tab-analytics',
           tabBarIcon: ({ color, size, focused }) => (
             <TabIcon
