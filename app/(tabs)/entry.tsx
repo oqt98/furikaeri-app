@@ -15,7 +15,7 @@ import { preparePhotoForUpload } from '../../lib/photoProcessing';
 import { buildCalendarCells, formatDateLabel, isValidDateKey, mergeDateWithTime, toDateKey } from '../../lib/reviewDate';
 import { reviewRepository, ReviewSyncError } from '../../lib/reviewRepository';
 import { tagRepository } from '../../lib/tagRepository';
-import type { ReviewItem, ReviewPhoto } from '../../lib/storage';
+import { DuplicateReviewDateError, type ReviewItem, type ReviewPhoto } from '../../lib/storage';
 import { useAppTheme } from '../../lib/theme-context';
 import { createCardShadow } from '../../lib/theme';
 
@@ -41,7 +41,7 @@ type Snapshot = {
 export default function EntryScreen() {
   const navigation = useNavigation();
   const { templateId, reviewId, date } = useLocalSearchParams<{ templateId?: string; reviewId?: string; date?: string }>();
-  const { theme } = useAppTheme();
+  const { theme, t } = useAppTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
   const isEditMode = Boolean(reviewId);
   const draftKey = isEditMode ? `edit:${reviewId}` : 'new';
@@ -260,6 +260,10 @@ export default function EntryScreen() {
       router.replace('/(tabs)/history');
     } catch (error) {
       console.error(error);
+      if (error instanceof DuplicateReviewDateError) {
+        Alert.alert(t('entry.duplicateDateTitle'), t('entry.duplicateDateBody'));
+        return;
+      }
       if (error instanceof ReviewSyncError) {
         Alert.alert('クラウド同期に失敗しました', `${error.message}\n\n端末側の内容は保持されています。通信状況を確認して、あとでもう一度お試しください。`);
         return;
@@ -319,7 +323,7 @@ export default function EntryScreen() {
           <Text style={styles.sectionLabel}>日付</Text>
           <TextInput style={[styles.input, dateError ? styles.inputError : null]} value={dateInputValue} onChangeText={handleDateInputChange} onBlur={handleDateInputBlur} placeholder="2026-04-07" placeholderTextColor={theme.colors.textSoft} autoCapitalize="none" />
           {dateError ? <Text style={styles.errorText}>{dateError}</Text> : null}
-          <Text style={styles.helperText}>同じ日付にも複数の記録を保存できます。</Text>
+          <Text style={styles.helperText}>1日に保存できる記録は1件です。別の日付の記録は作成できます。</Text>
           <Pressable style={styles.calendarToggleButton} onPress={() => setIsCalendarOpen((prev) => !prev)}>
             <Ionicons name="calendar-outline" size={18} color={theme.colors.primaryDark} />
             <Text style={styles.calendarToggleText}>{isCalendarOpen ? 'カレンダーを閉じる' : 'カレンダーを開く'}</Text>

@@ -1,5 +1,6 @@
 import {
   deleteReview,
+  DuplicateReviewDateError,
   getReviewById,
   getReviews,
   replaceAllReviews,
@@ -451,6 +452,9 @@ export const reviewRepository: ReviewRepository = {
     try {
       await upsertRemoteReview(item);
     } catch (error) {
+      if (error instanceof DuplicateReviewDateError) {
+        throw error;
+      }
       console.error('reviewRepository.create remote error:', error);
       throw new ReviewSyncError(
         'create',
@@ -464,6 +468,9 @@ export const reviewRepository: ReviewRepository = {
     try {
       await upsertRemoteReview(item);
     } catch (error) {
+      if (error instanceof DuplicateReviewDateError) {
+        throw error;
+      }
       console.error('reviewRepository.update remote error:', error);
       throw new ReviewSyncError(
         'update',

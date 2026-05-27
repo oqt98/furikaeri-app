@@ -10,9 +10,9 @@ const validCsv = [
   `2026-04-05,${templates[0].id},${CATEGORIES[0]},4,朝の記録,よく進んだ,読書,疲れた,true`,
 ].join('\n');
 
-const sameDayCsv = [
+const duplicateCsv = [
   'date,template,category,mood,title,memo',
-  `2026-04-06,${templates[0].id},${CATEGORIES[0]},3,同じ日付,追加の記録`,
+  `2026-04-06,${templates[0].id},${CATEGORIES[0]},3,同じ日付,既存と重複`,
 ].join('\n');
 
 const invalidCsv = [
@@ -47,7 +47,7 @@ describe('SettingsImportSection', () => {
     });
   });
 
-  it('imports a same-day review while keeping the existing review', async () => {
+  it('skips duplicate dates while keeping the existing review', async () => {
     await saveReview({
       id: 'existing-1',
       createdAt: '2026-04-06T09:00:00.000Z',
@@ -63,19 +63,19 @@ describe('SettingsImportSection', () => {
       isFavorite: false,
     });
 
-    render(<SettingsImportSection pickCsvText={jest.fn().mockResolvedValue(sameDayCsv)} />);
+    render(<SettingsImportSection pickCsvText={jest.fn().mockResolvedValue(duplicateCsv)} />);
 
     fireEvent.press(screen.getByTestId('settings-import-button'));
 
     await waitFor(() => {
       expect(screen.getByTestId('settings-import-result')).toHaveTextContent(
-        /1 件を取り込みました。/
+        /1 件はスキップされました。/
       );
     });
 
     const reviews = await getReviews();
-    expect(reviews).toHaveLength(2);
-    expect(reviews.map((item) => item.id)).toContain('existing-1');
+    expect(reviews).toHaveLength(1);
+    expect(reviews[0].id).toBe('existing-1');
   });
 
   it('shows an error result for invalid CSV data', async () => {

@@ -46,6 +46,9 @@ create table if not exists public.reviews (
 create index if not exists reviews_user_id_review_date_idx
   on public.reviews (user_id, review_date desc);
 
+create unique index if not exists reviews_user_id_review_date_key
+  on public.reviews (user_id, review_date);
+
 create index if not exists reviews_user_id_updated_at_idx
   on public.reviews (user_id, updated_at desc);
 

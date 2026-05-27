@@ -131,7 +131,7 @@ describe('app smoke', () => {
     });
   });
 
-  it('starts a new record from home even when today already has a review', async () => {
+  it('opens today’s existing record from home when today already has a review', async () => {
     const today = new Date().toISOString();
     await saveReview(createReview({ createdAt: today, updatedAt: today }));
     const result = renderRouter('./app', { initialUrl: '/' });
@@ -143,7 +143,7 @@ describe('app smoke', () => {
     fireEvent.press(screen.getByTestId('home-start-review-button'));
 
     await waitFor(() => {
-      expect(result.getPathname()).toBe('/templates');
+      expect(result.getPathname()).toBe('/entry');
     });
   });
 
