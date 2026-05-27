@@ -10,7 +10,6 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import SettingsImportSection from '../../components/SettingsImportSection';
 import SwipeTabPage from '../../components/SwipeTabPage';
 import {
   cancelExistingReminderIfAny as syncCancelExistingReminderIfAny,
@@ -138,7 +137,7 @@ export default function SettingsScreen() {
       <ScrollView contentContainerStyle={styles.container}>
         <Text style={styles.title}>設定</Text>
         <Text style={styles.subtitle}>
-          リマインダー、タグ管理、CSV取り込み、データ削除をここで調整できます。
+          リマインダー、タグ管理、データ削除をここで調整できます。
         </Text>
 
         <View style={styles.brandCard}>
@@ -148,10 +147,6 @@ export default function SettingsScreen() {
             入力のしやすさを保ちながら、続けやすい振り返り環境を整えるための設定です。
           </Text>
         </View>
-
-        <SectionCard title="Notion CSV Import">
-          <SettingsImportSection />
-        </SectionCard>
 
         <SectionCard title="リマインダー">
           <Text style={styles.sectionBody}>

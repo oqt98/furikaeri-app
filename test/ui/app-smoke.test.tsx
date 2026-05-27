@@ -52,13 +52,13 @@ describe('app smoke', () => {
     });
   });
 
-  it('renders the settings screen and import entrypoint', async () => {
+  it('renders the settings screen and reminder controls', async () => {
     renderRouter('./app', { initialUrl: '/settings' });
 
     await waitFor(() => {
-      expect(screen.getByTestId('settings-import-button')).toBeOnTheScreen();
+      expect(screen.getByText('毎日のリマインダー')).toBeOnTheScreen();
     });
-    expect(screen.getByText(/CSV Import|Notion CSV Import/)).toBeOnTheScreen();
+    expect(screen.queryByText(/CSV Import|Notion CSV Import/)).toBeNull();
   });
 
   it('opens the side menu and navigates to the important days screen', async () => {

@@ -61,7 +61,7 @@ create unique index if not exists reviews_user_id_import_source_fingerprint_key
   where import_source is not null and import_fingerprint is not null;
 
 comment on column public.reviews.review_date is
-  'Daily grouping key. Not unique in phase 1 because the app currently allows multiple reviews per day.';
+  'Daily grouping key. Phase 1 keeps one review per user per day.';
 
 create trigger set_reviews_updated_at
 before update on public.reviews

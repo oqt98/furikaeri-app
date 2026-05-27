@@ -19,11 +19,6 @@ const MENU_ITEMS = [
     icon: 'notifications-outline',
     route: '/notifications' as Href,
   },
-  {
-    key: 'menu.importExport',
-    icon: 'swap-horizontal-outline',
-    route: '/import-export' as Href,
-  },
   { key: 'menu.about', icon: 'information-circle-outline', route: '/about' as Href },
 ] as const;
 
