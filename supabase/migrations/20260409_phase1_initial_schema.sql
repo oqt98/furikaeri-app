@@ -157,6 +157,14 @@ alter table public.tags enable row level security;
 alter table public.review_tags enable row level security;
 alter table public.app_preferences enable row level security;
 
+grant usage on schema public to authenticated;
+grant select, insert, update, delete on table public.profiles to authenticated;
+grant select, insert, update, delete on table public.reviews to authenticated;
+grant select, insert, update, delete on table public.review_photos to authenticated;
+grant select, insert, update, delete on table public.tags to authenticated;
+grant select, insert, update, delete on table public.review_tags to authenticated;
+grant select, insert, update, delete on table public.app_preferences to authenticated;
+
 create policy "profiles_select_own"
 on public.profiles
 for select
