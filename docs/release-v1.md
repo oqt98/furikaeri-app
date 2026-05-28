@@ -20,20 +20,25 @@
 - タグ
 - 写真
 - 通知リマインダー
+- 大切な日
 - テーマ / 言語 / オンボーディング / About
-- Supabase Auth / Database / Storage 連携
+- Supabase Auth / DB / Storage 基盤
 
 ## 初回リリースに含めない機能
 
 - 週次AI要約
 - AI要約生成ボタン
 - Supabase Edge Function の週次AI要約をアプリ上から呼ぶ導線
+- Import / Export
 - Notion CSV import
 - JSON export / import
-- インポート / エクスポート画面への導線
 - iOS 公開
 - 課金
 - 高度な週次比較や有料分析
+
+## 大切な日の扱い
+
+大切な日は初回リリースに含めます。現状はローカル保存の機能で、保存する項目は名前、日付、種類、毎年繰り返すかどうか、作成日時、更新日時です。個別メモや個別通知設定は持っていません。
 
 ## 実装判断
 

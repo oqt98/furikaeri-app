@@ -14,16 +14,17 @@
 - タグ
 - 写真
 - 通知リマインダー
+- 大切な日
 - テーマ / 言語 / オンボーディング / About
-- Supabase を使ったクラウド保存の基盤
+- Supabase Auth / DB / Storage 基盤
 
 初回リリースに含めないもの:
 
 - 週次AI要約
 - AI要約生成ボタン
+- Import / Export
 - Notion CSV import
 - JSON export / import
-- インポート / エクスポート画面への導線
 - iOS 公開
 - 課金
 
@@ -36,8 +37,9 @@
 - カレンダーで日付ごとの記録を確認
 - 基本分析の表示
 - 通知リマインダー設定
+- 大切な日の登録、編集、削除、一覧表示、カレンダー表示
 - テーマ、言語、オンボーディング、About
-- Supabase Auth / Database / Storage 連携
+- Supabase Auth / DB / Storage 連携
 
 ## バックエンド方針
 
@@ -49,7 +51,7 @@
 - 永続化と repository: `lib/`
 - Supabase SQL / Edge Functions: `supabase/`
 
-週次AI要約用の Edge Function や import/export 関連モジュールは残っていますが、初回リリースではアプリ上の導線から外しています。
+週次AI要約用の Edge Function や import/export 関連モジュールは残っていますが、初回リリースではアプリ上の導線から外しています。大切な日は現状ローカル保存の機能で、Supabase同期対象ではありません。
 
 ## セットアップ
 
