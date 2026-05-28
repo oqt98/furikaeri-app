@@ -41,7 +41,11 @@ export default function TemplatesScreen() {
         subtitle="その日の気分に合わせて、書きやすい形を選べます。"
       />
 
-      <Pressable style={styles.quickCard} onPress={() => handleSelectTemplate('diary')}>
+      <Pressable
+        testID="template-simple-button"
+        style={styles.quickCard}
+        onPress={() => handleSelectTemplate('diary')}
+      >
         <View style={styles.quickText}>
           <Text style={styles.quickTitle}>シンプルに記録</Text>
           <Text style={styles.quickBody}>出来事からそのまま書き始めます。</Text>

@@ -11,6 +11,7 @@ import {
   replaceTagCatalog,
   reorderTags,
   saveReview,
+  updateReview,
 } from '../lib/storage';
 import { CATEGORIES } from '../data/reviewOptions';
 import { templates } from '../data/templates';
@@ -31,6 +32,15 @@ function createReview(overrides = {}) {
     isFavorite: false,
     ...overrides,
   };
+}
+
+function atLocalNoon(date: Date) {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate(), 12).toISOString();
+}
+
+function atLocalNoonForDateKey(dateKey: string) {
+  const [year, month, day] = dateKey.split('-').map(Number);
+  return new Date(year, month - 1, day, 12).toISOString();
 }
 
 beforeEach(async () => {
@@ -113,6 +123,86 @@ describe('lib/storage', () => {
     const nextSaved = await getReviews();
     expect(nextSaved).toHaveLength(2);
     expect(nextSaved.map((item) => item.id)).toEqual(['review-3', 'review-1']);
+  });
+
+  it('blocks a second record for today but allows a new record for yesterday', async () => {
+    const today = new Date();
+    const yesterday = new Date(today);
+    yesterday.setDate(today.getDate() - 1);
+
+    await saveReview(
+      createReview({
+        id: 'today-1',
+        createdAt: atLocalNoon(today),
+      })
+    );
+
+    let duplicateError: unknown = null;
+    try {
+      await saveReview(
+        createReview({
+          id: 'today-2',
+          createdAt: atLocalNoon(today),
+        })
+      );
+    } catch (error) {
+      duplicateError = error;
+    }
+
+    expect(duplicateError instanceof DuplicateReviewDateError).toBe(true);
+
+    await saveReview(
+      createReview({
+        id: 'yesterday-1',
+        createdAt: atLocalNoon(yesterday),
+      })
+    );
+
+    const saved = await getReviews();
+    expect(saved.map((item) => item.id)).toEqual(['today-1', 'yesterday-1']);
+  });
+
+  it('blocks duplicate records for the selected review date', async () => {
+    await saveReview(
+      createReview({
+        id: 'selected-date-1',
+        createdAt: atLocalNoonForDateKey('2026-05-10'),
+      })
+    );
+
+    await expect(
+      saveReview(
+        createReview({
+          id: 'selected-date-2',
+          createdAt: atLocalNoonForDateKey('2026-05-10'),
+        })
+      )
+    ).rejects.toMatchObject({
+      existingReviewId: 'selected-date-1',
+    });
+  });
+
+  it('does not treat the edited review itself as a duplicate', async () => {
+    await saveReview(
+      createReview({
+        id: 'editable-review',
+        createdAt: atLocalNoonForDateKey('2026-05-11'),
+        answers: { event: 'before' },
+      })
+    );
+
+    await updateReview(
+      createReview({
+        id: 'editable-review',
+        createdAt: atLocalNoonForDateKey('2026-05-11'),
+        answers: { event: 'after' },
+      })
+    );
+
+    const saved = await getReviews();
+    expect(saved).toHaveLength(1);
+    expect(saved[0].id).toBe('editable-review');
+    expect(saved[0].answers.event).toBe('after');
   });
 
   it('importReviews imports valid rows, skips invalid rows and duplicate dates, and creates missing tags', async () => {

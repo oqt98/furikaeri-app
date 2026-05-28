@@ -1,3 +1,4 @@
+import { fireEvent } from '@testing-library/react-native';
 import { renderRouter, screen, waitFor } from 'expo-router/testing-library';
 import asyncStorage from './async-storage-mock.cjs';
 import {
@@ -9,11 +10,43 @@ import {
   getVisibleTemplateFields,
   shouldShowMemoField,
 } from '../app/(tabs)/entry';
+import { CATEGORIES } from '../data/reviewOptions';
+import { templates } from '../data/templates';
+import { saveReview } from '../lib/storage';
 import { getTheme } from '../lib/theme';
 
 beforeEach(async () => {
   await asyncStorage.clear();
 });
+
+function createReview(overrides = {}) {
+  return {
+    id: 'review-1',
+    createdAt: atLocalNoon(new Date()),
+    updatedAt: atLocalNoon(new Date()),
+    category: CATEGORIES[0],
+    mood: 4 as const,
+    templateId: 'diary',
+    templateName: templates[0].name,
+    actionTagIds: [],
+    stateTagIds: [],
+    answers: { event: 'today' },
+    photos: [],
+    isFavorite: false,
+    ...overrides,
+  };
+}
+
+function atLocalNoon(date: Date) {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate(), 12).toISOString();
+}
+
+function toDateKey(date: Date) {
+  const year = date.getFullYear();
+  const month = `${date.getMonth() + 1}`.padStart(2, '0');
+  const day = `${date.getDate()}`.padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
 
 describe('entry and calendar regressions', () => {
   it('always uses the event field and filters template-only answers', () => {
@@ -92,5 +125,33 @@ describe('entry and calendar regressions', () => {
     });
 
     expect(screen.getByTestId('selected-important-day-birthday')).toBeOnTheScreen();
+  });
+
+  it('creates an entry for the date selected in the calendar even when today has a record', async () => {
+    const today = new Date();
+    const yesterday = new Date(today);
+    yesterday.setDate(today.getDate() - 1);
+    const yesterdayKey = toDateKey(yesterday);
+
+    await saveReview(createReview({ id: 'today-review', createdAt: atLocalNoon(today) }));
+
+    renderRouter('./app', { initialUrl: '/calendar' });
+
+    await waitFor(() => {
+      expect(screen.getByTestId(`calendar-day-${yesterdayKey}`)).toBeOnTheScreen();
+    });
+
+    fireEvent.press(screen.getByTestId(`calendar-day-${yesterdayKey}`));
+    fireEvent.press(screen.getByTestId('calendar-create-button'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('template-simple-button')).toBeOnTheScreen();
+    });
+
+    fireEvent.press(screen.getByTestId('template-simple-button'));
+
+    await waitFor(() => {
+      expect(screen.getByText(new RegExp(yesterdayKey))).toBeOnTheScreen();
+    });
   });
 });
