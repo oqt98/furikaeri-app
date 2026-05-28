@@ -15,8 +15,8 @@
 | splash | 起動時に崩れないか確認 |  |  |
 | 運営者名 | `Daynote 運営者` | 確定済み |  |
 | 問い合わせメール | `oqt.1998@gmail.com` | 確定済み |  |
-| privacy policy URL | GitHub Pages 公開後に確定 | 未完了 |  |
-| 制定日 | 公開時に確定 | 未完了 |  |
+| privacy policy URL | `https://oqt98.github.io/furikaeri-app/privacy-policy.html` | 確定済み | Play Console に登録する |
+| 制定日 | `2026年5月28日` | 確定済み |  |
 | クラウド削除依頼手順 | 問い合わせIDを添えたメール依頼で運用する | 確定済み |  |
 
 ## 実機QA
@@ -83,10 +83,10 @@
 
 | 項目 | 内容 | 状態 |
 | --- | --- | --- |
-| privacy policy URL | GitHub Pagesで公開ページを用意し、Play Console に登録 | GitHub Pages公開後に確定 |
+| privacy policy URL | `https://oqt98.github.io/furikaeri-app/privacy-policy.html` を Play Console に登録 | 確定済み |
 | 運営者名 | `Daynote 運営者` | 確定済み |
 | 問い合わせメール | `oqt.1998@gmail.com` | 確定済み |
-| 制定日 | privacy policy の制定日を公開時に決める | 公開時に確定 |
+| 制定日 | `2026年5月28日` | 確定済み |
 | クラウド削除依頼手順 | 問い合わせIDを添えて `oqt.1998@gmail.com` にメール依頼 | 確定済み |
 | スクリーンショット | Play Store用画像を作成 | 未完了 |
 | production build | EAS buildを実行 | 未実行 |

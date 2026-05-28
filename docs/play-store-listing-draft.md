@@ -72,7 +72,7 @@ Daynote は、医療・心理診断を目的としたアプリではありませ
 
 問い合わせメール: oqt.1998@gmail.com
 
-プライバシーポリシーURL: [GitHub Pages公開後に確定]
+プライバシーポリシーURL: https://oqt98.github.io/furikaeri-app/privacy-policy.html
 
 実装上、次のデータを扱います。
 
