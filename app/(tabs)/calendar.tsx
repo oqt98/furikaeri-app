@@ -3,12 +3,15 @@ import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
 import {
   Alert,
+  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
+import AppHeader from '../../components/AppHeader';
+import SideMenu from '../../components/SideMenu';
 import SwipeTabPage from '../../components/SwipeTabPage';
 import { getMoodOption } from '../../data/reviewOptions';
 import {
@@ -42,6 +45,8 @@ export default function CalendarScreen() {
   const [importantDays, setImportantDays] = useState<ImportantDay[]>([]);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [favoriteLoadingId, setFavoriteLoadingId] = useState<string | null>(null);
+  const [isMenuVisible, setIsMenuVisible] = useState(false);
+  const [isMonthPickerOpen, setIsMonthPickerOpen] = useState(false);
   const [currentMonth, setCurrentMonth] = useState(() => {
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth(), 1);
@@ -149,8 +154,11 @@ export default function CalendarScreen() {
         testID="screen-calendar"
         contentContainerStyle={styles.container}
       >
-        <Text style={styles.title}>{t('calendar.title')}</Text>
-        <Text style={styles.subtitle}>{t('calendar.subtitle')}</Text>
+        <AppHeader
+          title={t('calendar.title')}
+          subtitle={t('calendar.subtitle')}
+          onOpenMenu={() => setIsMenuVisible(true)}
+        />
 
         <View style={styles.monthCard}>
           <Pressable
@@ -162,7 +170,10 @@ export default function CalendarScreen() {
             <Ionicons name="chevron-back" size={18} color={theme.colors.primaryDark} />
           </Pressable>
 
-          <View style={styles.monthHeaderText}>
+          <Pressable
+            style={styles.monthHeaderText}
+            onPress={() => setIsMonthPickerOpen(true)}
+          >
             <Text style={styles.monthLabel}>
               {currentMonth.toLocaleDateString(localeTag, {
                 year: 'numeric',
@@ -170,7 +181,7 @@ export default function CalendarScreen() {
               })}
             </Text>
             <Text style={styles.monthCaption}>{t('calendar.monthCaption')}</Text>
-          </View>
+          </Pressable>
 
           <Pressable
             style={styles.todayButton}
@@ -345,7 +356,6 @@ export default function CalendarScreen() {
                 </View>
 
                 <View style={styles.badgesRow}>
-                  <Badge label={item.category} tone="primary" />
                   {mood ? <Badge label={`${mood.emoji} ${mood.label}`} tone="muted" /> : null}
                 </View>
 
@@ -397,7 +407,86 @@ export default function CalendarScreen() {
           })
         )}
       </ScrollView>
+      <MonthPickerModal
+        visible={isMonthPickerOpen}
+        currentMonth={currentMonth}
+        locale={locale}
+        onClose={() => setIsMonthPickerOpen(false)}
+        onSelect={(nextMonth) => {
+          setCurrentMonth(nextMonth);
+          setSelectedDateKey(toDateKey(new Date(nextMonth.getFullYear(), nextMonth.getMonth(), 1)));
+          setIsMonthPickerOpen(false);
+        }}
+      />
+      <SideMenu visible={isMenuVisible} onClose={() => setIsMenuVisible(false)} />
     </SwipeTabPage>
+  );
+}
+
+function MonthPickerModal({
+  visible,
+  currentMonth,
+  locale,
+  onClose,
+  onSelect,
+}: {
+  visible: boolean;
+  currentMonth: Date;
+  locale: 'ja' | 'en';
+  onClose: () => void;
+  onSelect: (month: Date) => void;
+}) {
+  const { theme } = useAppTheme();
+  const styles = useMemo(() => createCalendarStyles(theme), [theme]);
+  const years = useMemo(() => {
+    const year = currentMonth.getFullYear();
+    return Array.from({ length: 7 }, (_, index) => year - 3 + index);
+  }, [currentMonth]);
+
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <Pressable style={styles.modalOverlay} onPress={onClose}>
+        <Pressable style={styles.modalCard} onPress={() => undefined}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>{locale === 'en' ? 'Select month' : '年月を選ぶ'}</Text>
+            <Pressable onPress={onClose}>
+              <Ionicons name="close" size={20} color={theme.colors.textMuted} />
+            </Pressable>
+          </View>
+          <ScrollView contentContainerStyle={styles.monthPickerBody}>
+            {years.map((year) => (
+              <View key={year} style={styles.monthPickerYearBlock}>
+                <Text style={styles.monthPickerYear}>{year}</Text>
+                <View style={styles.monthPickerGrid}>
+                  {Array.from({ length: 12 }, (_, index) => {
+                    const month = index + 1;
+                    const active =
+                      currentMonth.getFullYear() === year &&
+                      currentMonth.getMonth() === index;
+                    return (
+                      <Pressable
+                        key={`${year}-${month}`}
+                        style={[styles.monthPickerChip, active && styles.monthPickerChipActive]}
+                        onPress={() => onSelect(new Date(year, index, 1))}
+                      >
+                        <Text
+                          style={[
+                            styles.monthPickerChipText,
+                            active && styles.monthPickerChipTextActive,
+                          ]}
+                        >
+                          {locale === 'en' ? new Date(year, index, 1).toLocaleDateString('en-US', { month: 'short' }) : `${month}月`}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </View>
+            ))}
+          </ScrollView>
+        </Pressable>
+      </Pressable>
+    </Modal>
   );
 }
 
@@ -474,7 +563,7 @@ export function createCalendarStyles(theme = getTheme('light')) {
     container: {
       flexGrow: 1,
       backgroundColor: theme.colors.background,
-      padding: theme.spacing.xl,
+      padding: theme.spacing.lg,
       paddingBottom: 120,
     },
     title: {
@@ -494,7 +583,7 @@ export function createCalendarStyles(theme = getTheme('light')) {
       borderRadius: theme.radius.xl,
       borderWidth: 1,
       borderColor: theme.colors.border,
-      padding: theme.spacing.lg,
+      padding: theme.spacing.md,
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
@@ -523,6 +612,7 @@ export function createCalendarStyles(theme = getTheme('light')) {
       alignItems: 'center',
       flexShrink: 1,
       paddingHorizontal: theme.spacing.sm,
+      paddingVertical: theme.spacing.xs,
     },
     monthLabel: {
       ...theme.typography.section,
@@ -539,7 +629,7 @@ export function createCalendarStyles(theme = getTheme('light')) {
       borderRadius: theme.radius.xl,
       borderWidth: 1,
       borderColor: theme.colors.border,
-      padding: theme.spacing.lg,
+      padding: theme.spacing.md,
       marginBottom: theme.spacing.lg,
     },
     weekRow: {
@@ -809,6 +899,66 @@ export function createCalendarStyles(theme = getTheme('light')) {
     deleteButtonText: {
       ...theme.typography.caption,
       color: theme.colors.danger,
+    },
+    modalOverlay: {
+      flex: 1,
+      backgroundColor: 'rgba(0,0,0,0.28)',
+      justifyContent: 'center',
+      padding: theme.spacing.lg,
+    },
+    modalCard: {
+      backgroundColor: theme.colors.surface,
+      borderRadius: theme.radius.xl,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      padding: theme.spacing.xl,
+      maxHeight: '82%',
+    },
+    modalHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginBottom: theme.spacing.md,
+    },
+    modalTitle: {
+      ...theme.typography.section,
+      color: theme.colors.text,
+    },
+    monthPickerBody: {
+      gap: theme.spacing.lg,
+      paddingBottom: theme.spacing.sm,
+    },
+    monthPickerYearBlock: {
+      gap: theme.spacing.sm,
+    },
+    monthPickerYear: {
+      ...theme.typography.caption,
+      color: theme.colors.textSoft,
+    },
+    monthPickerGrid: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: theme.spacing.sm,
+    },
+    monthPickerChip: {
+      width: '30%',
+      borderRadius: theme.radius.lg,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      backgroundColor: theme.colors.surfaceMuted,
+      paddingVertical: 10,
+      alignItems: 'center',
+    },
+    monthPickerChipActive: {
+      backgroundColor: theme.colors.primary,
+      borderColor: theme.colors.primary,
+    },
+    monthPickerChipText: {
+      ...theme.typography.caption,
+      color: theme.colors.textMuted,
+    },
+    monthPickerChipTextActive: {
+      color: theme.colors.white,
     },
   });
 }

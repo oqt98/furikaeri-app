@@ -15,10 +15,8 @@ import AppHeader from '../../components/AppHeader';
 import SideMenu from '../../components/SideMenu';
 import SwipeTabPage from '../../components/SwipeTabPage';
 import {
-  CATEGORY_FILTER_OPTIONS,
   MOOD_OPTIONS,
   getMoodOption,
-  type CategoryFilterOption,
   type MoodValue,
 } from '../../data/reviewOptions';
 import { reviewRepository } from '../../lib/reviewRepository';
@@ -37,13 +35,9 @@ const toggleFavoriteReview = reviewRepository.toggleFavorite;
 export default function HistoryScreen() {
   const { theme, t, locale } = useAppTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
-  const allCategoryOption = CATEGORY_FILTER_OPTIONS[0];
-  const workCategoryOption = CATEGORY_FILTER_OPTIONS[1];
 
   const [reviews, setReviews] = useState<ReviewItem[]>([]);
   const [searchText, setSearchText] = useState('');
-  const [selectedCategory, setSelectedCategory] =
-    useState<CategoryFilterOption>(allCategoryOption);
   const [selectedMood, setSelectedMood] = useState<MoodValue | 'all'>('all');
   const [selectedActionTagId, setSelectedActionTagId] = useState('all');
   const [selectedStateTagId, setSelectedStateTagId] = useState('all');
@@ -108,37 +102,16 @@ export default function HistoryScreen() {
     periodFilter,
     searchText,
     selectedActionTagId,
-    selectedCategory,
     selectedMood,
     selectedMonth,
     selectedStateTagId,
     sortOrder,
   ]);
 
-  const categoryOptions = useMemo(
-    () =>
-      CATEGORY_FILTER_OPTIONS.map((option) => ({
-        value: option,
-        label:
-          option === allCategoryOption
-            ? t('common.all')
-            : option === workCategoryOption
-              ? locale === 'en'
-                ? 'Work'
-                : option
-              : locale === 'en'
-                ? 'Private'
-                : option,
-      })),
-    [allCategoryOption, locale, t, workCategoryOption]
-  );
-
   const filteredReviews = useMemo(() => {
     const keyword = searchText.trim().toLowerCase();
 
     return reviews.filter((review) => {
-      const categoryMatch =
-        selectedCategory === allCategoryOption || review.category === selectedCategory;
       const moodMatch = selectedMood === 'all' || review.mood === selectedMood;
       const favoriteMatch = !favoritesOnly || review.isFavorite;
       const actionTagMatch =
@@ -150,11 +123,10 @@ export default function HistoryScreen() {
         .map((id) => tagLabelMap.get(id) ?? '')
         .join(' ');
       const body = Object.values(review.answers ?? {}).join(' ');
-      const searchPool = `${review.templateName} ${review.category} ${tagLabels} ${body}`.toLowerCase();
+      const searchPool = `${review.templateName} ${tagLabels} ${body}`.toLowerCase();
       const keywordMatch = !keyword || searchPool.includes(keyword);
 
       return (
-        categoryMatch &&
         moodMatch &&
         favoriteMatch &&
         actionTagMatch &&
@@ -164,13 +136,11 @@ export default function HistoryScreen() {
       );
     });
   }, [
-    allCategoryOption,
     favoritesOnly,
     periodFilter,
     reviews,
     searchText,
     selectedActionTagId,
-    selectedCategory,
     selectedMood,
     selectedMonth,
     selectedStateTagId,
@@ -200,13 +170,6 @@ export default function HistoryScreen() {
     if (periodFilter === 'thisMonth') labels.push(t('history.thisMonth'));
     if (periodFilter === 'month') labels.push(selectedMonth);
 
-    if (selectedCategory !== allCategoryOption) {
-      labels.push(
-        categoryOptions.find((option) => option.value === selectedCategory)?.label ??
-          selectedCategory
-      );
-    }
-
     if (selectedMood !== 'all') {
       const mood = getMoodOption(selectedMood);
       labels.push(`${mood.emoji} ${mood.label}`);
@@ -226,12 +189,9 @@ export default function HistoryScreen() {
 
     return labels;
   }, [
-    allCategoryOption,
-    categoryOptions,
     favoritesOnly,
     periodFilter,
     selectedActionTagId,
-    selectedCategory,
     selectedMonth,
     selectedMood,
     selectedStateTagId,
@@ -378,27 +338,17 @@ export default function HistoryScreen() {
             />
           </View>
           {periodFilter === 'month' ? (
-            <TextInput
-              style={styles.monthInput}
-              value={selectedMonth}
-              onChangeText={setSelectedMonth}
-              placeholder="2026-04"
-              placeholderTextColor={theme.colors.textSoft}
-            />
+            <View style={styles.filterRow}>
+              {getAvailableMonthKeys(reviews).map((monthKey) => (
+                <FilterChip
+                  key={monthKey}
+                  label={formatMonthLabel(monthKey, locale)}
+                  active={selectedMonth === monthKey}
+                  onPress={() => setSelectedMonth(monthKey)}
+                />
+              ))}
+            </View>
           ) : null}
-        </FilterSection>
-
-        <FilterSection title={t('history.category')} styles={styles}>
-          <View style={styles.filterRow}>
-            {categoryOptions.map((option) => (
-              <FilterChip
-                key={option.value}
-                label={option.label}
-                active={option.value === selectedCategory}
-                onPress={() => setSelectedCategory(option.value)}
-              />
-            ))}
-          </View>
         </FilterSection>
 
         <FilterSection title={t('history.mood')} styles={styles}>
@@ -606,7 +556,7 @@ function HistoryCard({
       </View>
 
       <View style={styles.metaChips}>
-        {[item.category, ...tags].map((label, index) => (
+        {tags.map((label, index) => (
           <MetaChip key={`${item.id}-${label}-${index}`} label={label} muted={index > 0} />
         ))}
       </View>
@@ -616,6 +566,12 @@ function HistoryCard({
       </Text>
 
       <View style={styles.cardActions}>
+        <Pressable
+          style={styles.secondaryButton}
+          onPress={() => router.push({ pathname: '/entry', params: { reviewId: item.id } })}
+        >
+          <Text style={styles.secondaryButtonText}>{t('common.edit')}</Text>
+        </Pressable>
         <Pressable
           style={styles.secondaryButton}
           onPress={() => router.push(`/review/${item.id}` as never)}
@@ -717,12 +673,37 @@ function getCurrentMonthKey() {
   return `${now.getFullYear()}-${`${now.getMonth() + 1}`.padStart(2, '0')}`;
 }
 
+function getAvailableMonthKeys(reviews: ReviewItem[]) {
+  const keys = Array.from(
+    new Set(
+      reviews.map((item) => {
+        const date = new Date(item.createdAt);
+        return `${date.getFullYear()}-${`${date.getMonth() + 1}`.padStart(2, '0')}`;
+      })
+    )
+  );
+
+  return keys.sort((a, b) => b.localeCompare(a));
+}
+
+function formatMonthLabel(monthKey: string, locale: 'ja' | 'en') {
+  const [year, month] = monthKey.split('-').map(Number);
+  if (locale === 'en') {
+    return new Date(year, month - 1, 1).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'long',
+    });
+  }
+
+  return `${year}年${month}月`;
+}
+
 function createStyles(theme: ReturnType<typeof useAppTheme>['theme']) {
   return StyleSheet.create({
     container: {
       flexGrow: 1,
       backgroundColor: theme.colors.background,
-      padding: theme.spacing.xl,
+      padding: theme.spacing.lg,
       paddingBottom: 120,
     },
     searchCard: {
@@ -903,7 +884,7 @@ function createStyles(theme: ReturnType<typeof useAppTheme>['theme']) {
       borderRadius: theme.radius.xl,
       borderWidth: 1,
       borderColor: theme.colors.border,
-      padding: theme.spacing.xl,
+      padding: theme.spacing.lg,
       marginBottom: theme.spacing.md,
     },
     cardTopRow: {

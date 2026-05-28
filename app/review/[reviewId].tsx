@@ -56,8 +56,6 @@ export default function ReviewDetailScreen() {
       </View>
 
       <View style={styles.card}>
-        <Text style={styles.label}>カテゴリ</Text>
-        <Text style={styles.body}>{review.category}</Text>
         {tags.length > 0 ? (
           <>
             <Text style={styles.label}>タグ</Text>

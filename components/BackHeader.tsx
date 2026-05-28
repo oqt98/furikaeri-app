@@ -15,7 +15,17 @@ export default function BackHeader({ title, subtitle }: Props) {
 
   return (
     <View style={styles.header}>
-      <Pressable style={styles.backButton} onPress={() => router.back()}>
+      <Pressable
+        style={styles.backButton}
+        onPress={() => {
+          if (router.canGoBack()) {
+            router.back();
+            return;
+          }
+
+          router.replace('/(tabs)');
+        }}
+      >
         <Ionicons name="chevron-back" size={20} color={theme.colors.primaryDark} />
       </Pressable>
       <View style={styles.textBlock}>
