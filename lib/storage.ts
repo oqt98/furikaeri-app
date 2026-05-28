@@ -145,7 +145,7 @@ export async function saveReview(item: ReviewItem): Promise<void> {
   const existingOnSameDate = await getReviewByDateKey(toDateKey(new Date(item.createdAt)), item.id);
   if (existingOnSameDate) {
     throw new DuplicateReviewDateError(
-      '同じ日付の記録は1件までです。',
+      'この日付の記録はすでにあります。',
       existingOnSameDate.id
     );
   }
@@ -162,7 +162,7 @@ export async function updateReview(updatedItem: ReviewItem): Promise<void> {
   );
   if (existingOnSameDate) {
     throw new DuplicateReviewDateError(
-      '同じ日付の記録は1件までです。',
+      'この日付の記録はすでにあります。',
       existingOnSameDate.id
     );
   }

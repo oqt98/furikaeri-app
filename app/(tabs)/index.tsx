@@ -74,6 +74,16 @@ export default function RecordHomeScreen() {
             </Text>
           </Pressable>
 
+          {recordedToday ? (
+            <Pressable
+              testID="home-create-other-date-button"
+              style={styles.secondaryButton}
+              onPress={() => router.push('/templates')}
+            >
+              <Text style={styles.secondaryButtonText}>別の日付で記録する</Text>
+            </Pressable>
+          ) : null}
+
           <View style={styles.helperRow}>
             <HintChip icon="time-outline" label={t('home.hintQuick')} />
             <HintChip icon="albums-outline" label={t('home.hintReview')} />
@@ -204,6 +214,20 @@ function createStyles(theme: ReturnType<typeof useAppTheme>['theme']) {
       fontSize: 16,
       fontWeight: '700',
       color: theme.colors.white,
+    },
+    secondaryButton: {
+      backgroundColor: theme.colors.surfaceMuted,
+      borderRadius: theme.radius.xl,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      paddingVertical: 14,
+      alignItems: 'center',
+      marginBottom: theme.spacing.lg,
+    },
+    secondaryButtonText: {
+      fontSize: 15,
+      fontWeight: '700',
+      color: theme.colors.primaryDark,
     },
     helperRow: {
       flexDirection: 'row',

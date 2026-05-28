@@ -337,9 +337,9 @@ export default function EntryScreen() {
 
         <View style={styles.innerBlock}>
           <Text style={styles.sectionLabel}>日付</Text>
-          <TextInput style={[styles.input, dateError ? styles.inputError : null]} value={dateInputValue} onChangeText={handleDateInputChange} onBlur={handleDateInputBlur} placeholder="2026-04-07" placeholderTextColor={theme.colors.textSoft} autoCapitalize="none" />
+          <TextInput testID="entry-date-input" style={[styles.input, dateError ? styles.inputError : null]} value={dateInputValue} onChangeText={handleDateInputChange} onBlur={handleDateInputBlur} placeholder="2026-04-07" placeholderTextColor={theme.colors.textSoft} autoCapitalize="none" />
           {dateError ? <Text style={styles.errorText}>{dateError}</Text> : null}
-          <Text style={styles.helperText}>1日に保存できる記録は1件です。別の日付の記録は作成できます。</Text>
+          <Text style={styles.helperText}>同じ日付には1件だけ記録できます。別の日付の記録は作成できます。</Text>
           <Pressable style={styles.calendarToggleButton} onPress={() => setIsCalendarOpen((prev) => !prev)}>
             <Ionicons name="calendar-outline" size={18} color={theme.colors.primaryDark} />
             <Text style={styles.calendarToggleText}>{isCalendarOpen ? 'カレンダーを閉じる' : 'カレンダーを開く'}</Text>
