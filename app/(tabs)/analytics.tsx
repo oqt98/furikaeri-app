@@ -4,7 +4,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import AppHeader from '../../components/AppHeader';
 import SideMenu from '../../components/SideMenu';
 import SwipeTabPage from '../../components/SwipeTabPage';
-import { CATEGORIES, MOOD_OPTIONS } from '../../data/reviewOptions';
+import { MOOD_OPTIONS } from '../../data/reviewOptions';
 import { buildInsightSummary } from '../../lib/insights';
 import { reviewRepository } from '../../lib/reviewRepository';
 import { type ReviewItem } from '../../lib/storage';
@@ -49,17 +49,11 @@ export default function AnalyticsScreen() {
       label: `${mood.emoji} ${mood.label}`,
       count: reviews.filter((item) => item.mood === mood.value).length,
     }));
-    const categoryCounts = CATEGORIES.map((category) => ({
-      label: category,
-      count: reviews.filter((item) => item.category === category).length,
-    }));
-
     return {
       total,
       uniqueDays,
       averagePerWeek: total === 0 ? 0 : Math.max(Math.round((total / 4) * 10) / 10, 0.5),
       moodCounts,
-      categoryCounts,
     };
   }, [reviews]);
 
@@ -130,10 +124,6 @@ export default function AnalyticsScreen() {
 
               {isBreakdownVisible ? (
                 <View style={styles.detailStack}>
-                  <CompactBreakdownCard
-                    title={t('analytics.categoryBreakdown')}
-                    rows={analytics.categoryCounts}
-                  />
                   <CompactBreakdownCard
                     title={t('analytics.moodBreakdown')}
                     rows={analytics.moodCounts}

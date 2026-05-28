@@ -127,7 +127,7 @@ describe('app smoke', () => {
     fireEvent.press(screen.getByTestId('home-start-review-button'));
 
     await waitFor(() => {
-      expect(screen.getByText('テンプレートを選ぶ')).toBeOnTheScreen();
+      expect(screen.getAllByText('テンプレートを選ぶ')[0]).toBeOnTheScreen();
     });
   });
 

@@ -13,6 +13,7 @@ export default function TemplatesScreen() {
   const { theme } = useAppTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
   const [items, setItems] = useState<ReviewTemplate[]>([]);
+  const [isTemplateListOpen, setIsTemplateListOpen] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
@@ -40,12 +41,27 @@ export default function TemplatesScreen() {
         subtitle="その日の気分に合わせて、書きやすい形を選べます。"
       />
 
-      <Pressable style={styles.quickCard} onPress={() => handleSelectTemplate(items[0]?.id)}>
+      <Pressable style={styles.quickCard} onPress={() => handleSelectTemplate('diary')}>
         <View style={styles.quickText}>
-          <Text style={styles.quickTitle}>まずはシンプルに記録</Text>
-          <Text style={styles.quickBody}>迷ったら最初のテンプレートから始められます。</Text>
+          <Text style={styles.quickTitle}>シンプルに記録</Text>
+          <Text style={styles.quickBody}>出来事からそのまま書き始めます。</Text>
         </View>
         <Ionicons name="flash-outline" size={20} color={theme.colors.primaryDark} />
+      </Pressable>
+
+      <Pressable
+        style={styles.quickCard}
+        onPress={() => setIsTemplateListOpen((value) => !value)}
+      >
+        <View style={styles.quickText}>
+          <Text style={styles.quickTitle}>テンプレートを選ぶ</Text>
+          <Text style={styles.quickBody}>必要なときだけ、振り返りの型を開きます。</Text>
+        </View>
+        <Ionicons
+          name={isTemplateListOpen ? 'chevron-up-outline' : 'albums-outline'}
+          size={20}
+          color={theme.colors.primaryDark}
+        />
       </Pressable>
 
       <Pressable style={styles.quickCard} onPress={handleSelectRandom}>
@@ -56,21 +72,25 @@ export default function TemplatesScreen() {
         <Ionicons name="shuffle-outline" size={20} color={theme.colors.primaryDark} />
       </Pressable>
 
-      {items.map((item) => (
-        <Pressable
-          key={item.id}
-          style={styles.templateCard}
-          onPress={() => handleSelectTemplate(item.id)}
-        >
-          <View style={styles.templateHeader}>
-            <Text style={styles.templateTitle}>{item.name}</Text>
-            <View style={styles.modeBadge}>
-              <Text style={styles.modeBadgeText}>{item.mode}</Text>
-            </View>
-          </View>
-          <Text style={styles.templateDescription}>{item.description}</Text>
-        </Pressable>
-      ))}
+      {isTemplateListOpen ? (
+        <View style={styles.templateList}>
+          {items.map((item) => (
+            <Pressable
+              key={item.id}
+              style={styles.templateCard}
+              onPress={() => handleSelectTemplate(item.id)}
+            >
+              <View style={styles.templateHeader}>
+                <Text style={styles.templateTitle}>{item.name}</Text>
+                <View style={styles.modeBadge}>
+                  <Text style={styles.modeBadgeText}>{item.mode}</Text>
+                </View>
+              </View>
+              <Text style={styles.templateDescription}>{item.description}</Text>
+            </Pressable>
+          ))}
+        </View>
+      ) : null}
     </ScrollView>
   );
 }
@@ -116,6 +136,9 @@ function createStyles(theme: ReturnType<typeof useAppTheme>['theme']) {
       borderColor: theme.colors.border,
       padding: theme.spacing.xl,
       marginBottom: theme.spacing.md,
+    },
+    templateList: {
+      marginTop: theme.spacing.sm,
     },
     templateHeader: {
       flexDirection: 'row',

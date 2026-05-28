@@ -20,10 +20,8 @@ import { useAppTheme } from '../../lib/theme-context';
 import { createCardShadow } from '../../lib/theme';
 
 const MEMO_FIELD_KEY = 'memo';
-const PRIMARY_FIELD_BY_TEMPLATE: Record<string, string> = {
-  diary: 'title',
-  memo: MEMO_FIELD_KEY,
-};
+const EVENT_FIELD_KEY = 'event';
+const EVENT_FIELD = { key: EVENT_FIELD_KEY, label: '出来事', multiline: true };
 const WEEK_LABELS = ['日', '月', '火', '水', '木', '金', '土'];
 
 type TagCatalogState = {
@@ -71,13 +69,11 @@ export default function EntryScreen() {
   const [isSaving, setIsSaving] = useState(false);
   const [isRecordDetailsOpen, setIsRecordDetailsOpen] = useState(false);
   const [isTagsOpen, setIsTagsOpen] = useState(false);
-  const [isTemplateQuestionsOpen, setIsTemplateQuestionsOpen] = useState(false);
   const [isPhotosOpen, setIsPhotosOpen] = useState(false);
   const initialSnapshotRef = useRef('');
   const skipLeaveGuardRef = useRef(false);
 
   const selectedTemplate = templates.find((item) => item.id === selectedTemplateId) ?? templates[0];
-  const primaryField = getPrimaryField(selectedTemplate.id);
   const visibleTemplateFields = getVisibleTemplateFields(selectedTemplate.id);
   const selectedMoodOption = MOOD_DISPLAY_OPTIONS.find((option) => option.value === mood) ?? MOOD_DISPLAY_OPTIONS[2];
   const currentSnapshot = useMemo(() => JSON.stringify({ templateId: selectedTemplateId, selectedDateKey, category, mood, answers, actionTagIds, stateTagIds, photos } satisfies Snapshot), [selectedTemplateId, selectedDateKey, category, mood, answers, actionTagIds, stateTagIds, photos]);
@@ -108,7 +104,7 @@ export default function EntryScreen() {
             return;
           }
           const nextDateKey = draft?.selectedDateKey && isValidDateKey(draft.selectedDateKey) ? draft.selectedDateKey : toDateKey(new Date(review.createdAt));
-          const snapshot = { templateId: draft?.templateId ?? review.templateId ?? templates[0].id, selectedDateKey: nextDateKey, category: draft?.category ?? review.category, mood: draft?.mood ?? review.mood ?? 3, answers: draft?.answers ?? review.answers ?? {}, actionTagIds: draft?.actionTagIds ?? review.actionTagIds ?? [], stateTagIds: draft?.stateTagIds ?? review.stateTagIds ?? [], photos: draft?.photos ?? review.photos ?? [] } satisfies Snapshot;
+          const snapshot = { templateId: draft?.templateId ?? review.templateId ?? templates[0].id, selectedDateKey: nextDateKey, category: draft?.category ?? review.category ?? CATEGORIES[0], mood: draft?.mood ?? review.mood ?? 3, answers: draft?.answers ?? review.answers ?? {}, actionTagIds: draft?.actionTagIds ?? review.actionTagIds ?? [], stateTagIds: draft?.stateTagIds ?? review.stateTagIds ?? [], photos: draft?.photos ?? review.photos ?? [] } satisfies Snapshot;
           setEditingReview(review);
           applySnapshot(snapshot, setSelectedTemplateId, setSelectedDateKey, setDateInputValue, setCalendarMonth, setCategory, setMood, setAnswers, setActionTagIds, setStateTagIds, setPhotos);
           initialSnapshotRef.current = JSON.stringify(snapshot);
@@ -258,7 +254,7 @@ export default function EntryScreen() {
     }
     try {
       setIsSaving(true);
-      const payload: ReviewItem = { id: editingReview?.id ?? createLocalReviewId(), createdAt: mergeDateWithTime(selectedDateKey, editingReview?.createdAt), updatedAt: new Date().toISOString(), category, mood, templateId: selectedTemplate.id, templateName: selectedTemplate.name, actionTagIds, stateTagIds, answers: answersForSave, photos: photos.map((photo, index) => ({ ...photo, order: index })), isFavorite: editingReview?.isFavorite ?? false };
+      const payload: ReviewItem = { id: editingReview?.id ?? createLocalReviewId(), createdAt: mergeDateWithTime(selectedDateKey, editingReview?.createdAt), updatedAt: new Date().toISOString(), category: category ?? CATEGORIES[0], mood, templateId: selectedTemplate.id, templateName: selectedTemplate.name, actionTagIds, stateTagIds, answers: answersForSave, photos: photos.map((photo, index) => ({ ...photo, order: index })), isFavorite: editingReview?.isFavorite ?? false };
       if (editingReview) await reviewRepository.update(payload); else await reviewRepository.create(payload);
       await clearEntryDraft(draftKey);
       initialSnapshotRef.current = currentSnapshot;
@@ -307,25 +303,23 @@ export default function EntryScreen() {
         <Text style={styles.selectedMoodText}>{selectedMoodOption.label}</Text>
       </ChoiceSection>
 
-      {primaryField ? (
-        <View style={styles.sectionCard}>
-          <Text style={styles.sectionLabel}>{primaryField.label}</Text>
-          <TextInput
-            testID={primaryField.key === MEMO_FIELD_KEY ? 'entry-memo-input' : 'entry-primary-input'}
-            style={styles.memoInput}
-            multiline
-            textAlignVertical="top"
-            placeholder={`${primaryField.label}を入力`}
-            placeholderTextColor={theme.colors.textSoft}
-            value={answers[primaryField.key] ?? ''}
-            onChangeText={(text) => setAnswers((prev) => ({ ...prev, [primaryField.key]: text }))}
-          />
-        </View>
-      ) : null}
+      <View style={styles.sectionCard}>
+        <Text style={styles.sectionLabel}>{EVENT_FIELD.label}</Text>
+        <TextInput
+          testID="entry-primary-input"
+          style={styles.memoInput}
+          multiline
+          textAlignVertical="top"
+          placeholder="今日あったことを入力"
+          placeholderTextColor={theme.colors.textSoft}
+          value={answers[EVENT_FIELD.key] ?? ''}
+          onChangeText={(text) => setAnswers((prev) => ({ ...prev, [EVENT_FIELD.key]: text }))}
+        />
+      </View>
 
       <DisclosureSection
-        title="記録の設定"
-        summary={`${selectedDateKey} ・ ${category} ・ ${selectedTemplate.name}`}
+        title="日付の設定"
+        summary={`${selectedDateKey} ・ ${selectedTemplate.name}`}
         isOpen={isRecordDetailsOpen}
         onToggle={() => setIsRecordDetailsOpen((value) => !value)}
         styles={styles}
@@ -369,15 +363,6 @@ export default function EntryScreen() {
           ) : null}
         </View>
 
-        <View style={styles.innerBlock}>
-          <Text style={styles.sectionLabel}>カテゴリ</Text>
-          <View style={styles.choiceWrap}>
-            {CATEGORIES.map((item) => {
-              const active = category === item;
-              return <Pressable key={item} style={[styles.choiceChip, active && styles.choiceChipActive]} onPress={() => setCategory(item)}><Text style={[styles.choiceChipText, active && styles.choiceChipTextActive]}>{item}</Text></Pressable>;
-            })}
-          </View>
-        </View>
       </DisclosureSection>
 
       <DisclosureSection title="タグ" summary="行動や気分を後から探しやすくします" isOpen={isTagsOpen} onToggle={() => setIsTagsOpen((value) => !value)} styles={styles}>
@@ -386,7 +371,7 @@ export default function EntryScreen() {
       </DisclosureSection>
 
       {visibleTemplateFields.length > 0 ? (
-        <DisclosureSection title="テンプレ質問" summary={`${selectedTemplate.name}で詳しく振り返る`} isOpen={isTemplateQuestionsOpen} onToggle={() => setIsTemplateQuestionsOpen((value) => !value)} styles={styles}>
+        <View style={styles.sectionCard}>
           <Text style={styles.sectionLabel}>テンプレ質問</Text>
           <Text style={styles.sectionTitle}>{selectedTemplate.name}の記録</Text>
           {visibleTemplateFields.map((field) => (
@@ -395,7 +380,7 @@ export default function EntryScreen() {
               <TextInput style={[styles.input, field.multiline !== false && styles.multiInput]} multiline={field.multiline !== false} textAlignVertical="top" placeholder={`${field.label}を入力`} placeholderTextColor={theme.colors.textSoft} value={answers[field.key] ?? ''} onChangeText={(text) => setAnswers((prev) => ({ ...prev, [field.key]: text }))} />
             </View>
           ))}
-        </DisclosureSection>
+        </View>
       ) : null}
 
       <DisclosureSection title="写真" summary={photos.length === 0 ? '必要なときだけ追加できます' : `${photos.length}枚`} isOpen={isPhotosOpen} onToggle={() => setIsPhotosOpen((value) => !value)} styles={styles}>
@@ -474,22 +459,19 @@ export function shouldShowMemoField(templateId: string) {
 }
 
 export function getPrimaryField(templateId: string) {
-  const template = templates.find((item) => item.id === templateId) ?? templates[0];
-  const primaryKey = PRIMARY_FIELD_BY_TEMPLATE[template.id];
-  if (!primaryKey) return null;
-  return template.fields.find((field) => field.key === primaryKey) ?? null;
+  return EVENT_FIELD;
 }
 
 export function getVisibleTemplateFields(templateId: string) {
   const template = templates.find((item) => item.id === templateId) ?? templates[0];
-  const primaryKey = PRIMARY_FIELD_BY_TEMPLATE[template.id];
-  return template.fields.filter((field) => field.key !== primaryKey);
+  return template.fields.filter(
+    (field) => field.key !== EVENT_FIELD_KEY && field.label !== EVENT_FIELD.label
+  );
 }
 
 export function getAnswersForSave(currentAnswers: Record<string, string>, templateId: string) {
   const allowedKeys = new Set(getVisibleTemplateFields(templateId).map((field) => field.key));
-  const primaryField = getPrimaryField(templateId);
-  if (primaryField) allowedKeys.add(primaryField.key);
+  allowedKeys.add(EVENT_FIELD.key);
   return Object.fromEntries(Object.entries(currentAnswers).filter(([key, value]) => allowedKeys.has(key) && typeof value === 'string'));
 }
 
@@ -508,11 +490,11 @@ function applySnapshot(snapshot: Snapshot, setSelectedTemplateId: (value: string
 
 function createStyles(theme: ReturnType<typeof useAppTheme>['theme']) {
   return StyleSheet.create({
-    container: { flexGrow: 1, backgroundColor: theme.colors.background, padding: theme.spacing.xl, paddingBottom: 96 },
+    container: { flexGrow: 1, backgroundColor: theme.colors.background, padding: theme.spacing.lg, paddingBottom: 96 },
     loadingContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: theme.colors.background },
     loadingText: { ...theme.typography.body, color: theme.colors.textMuted },
     flexFill: { flex: 1 },
-    sectionCard: { ...createCardShadow(theme), backgroundColor: theme.colors.surface, borderRadius: theme.radius.xl, borderWidth: 1, borderColor: theme.colors.border, padding: theme.spacing.xl, marginBottom: theme.spacing.md },
+    sectionCard: { ...createCardShadow(theme), backgroundColor: theme.colors.surface, borderRadius: theme.radius.xl, borderWidth: 1, borderColor: theme.colors.border, padding: theme.spacing.lg, marginBottom: theme.spacing.md },
     innerBlock: { marginBottom: theme.spacing.md },
     disclosureHeader: { flexDirection: 'row', alignItems: 'center', gap: theme.spacing.md },
     disclosureBody: { marginTop: theme.spacing.lg },
@@ -549,7 +531,7 @@ function createStyles(theme: ReturnType<typeof useAppTheme>['theme']) {
     choiceChipActive: { backgroundColor: theme.colors.primary, borderColor: theme.colors.primary },
     choiceChipText: { ...theme.typography.caption, color: theme.colors.textMuted },
     choiceChipTextActive: { color: theme.colors.white },
-    memoInput: { minHeight: 140, backgroundColor: theme.colors.surfaceMuted, borderRadius: theme.radius.xl, borderWidth: 1, borderColor: theme.colors.border, padding: theme.spacing.xl, color: theme.colors.text, fontSize: 17, lineHeight: 26 },
+    memoInput: { minHeight: 128, backgroundColor: theme.colors.surfaceMuted, borderRadius: theme.radius.xl, borderWidth: 1, borderColor: theme.colors.border, padding: theme.spacing.lg, color: theme.colors.text, fontSize: 16, lineHeight: 25 },
     fieldBlock: { marginTop: theme.spacing.md },
     fieldLabel: { ...theme.typography.body, color: theme.colors.text, fontWeight: '700', marginBottom: theme.spacing.sm },
     secondaryButton: { backgroundColor: theme.colors.surface, borderRadius: theme.radius.lg, paddingHorizontal: theme.spacing.md, paddingVertical: 10, borderWidth: 1, borderColor: theme.colors.border },
