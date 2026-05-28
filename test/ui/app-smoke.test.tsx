@@ -76,6 +76,21 @@ describe('app smoke', () => {
     });
   });
 
+  it('opens the side menu and navigates to tag management', async () => {
+    const result = renderRouter('./app', { initialUrl: '/' });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('screen-home')).toBeOnTheScreen();
+    });
+
+    fireEvent.press(screen.getByTestId('app-header-menu-button'));
+    fireEvent.press(screen.getByTestId('side-menu-menu.tags'));
+
+    await waitFor(() => {
+      expect(result.getPathname()).toBe('/tags');
+    });
+  });
+
   it('opens the side menu and navigates to onboarding', async () => {
     const result = renderRouter('./app', { initialUrl: '/' });
 

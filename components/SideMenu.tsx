@@ -13,6 +13,7 @@ const MENU_ITEMS = [
   { key: 'menu.theme', icon: 'color-palette-outline', route: '/theme' as Href },
   { key: 'menu.language', icon: 'language-outline', route: '/language' as Href },
   { key: 'menu.onboarding', icon: 'school-outline' },
+  { key: 'menu.tags', icon: 'pricetags-outline', route: '/tags' as Href },
   { key: 'menu.importantDays', icon: 'heart-outline', route: '/important-days' as Href },
   {
     key: 'menu.notifications',
