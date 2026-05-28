@@ -9,7 +9,14 @@ type InsightSummary = {
   weeklyStats: Array<{ label: string; value: string }>;
 };
 
-export function buildInsightSummary(reviews: ReviewItem[]): InsightSummary {
+type InsightOptions = {
+  tagLabelMap?: Map<string, string>;
+};
+
+export function buildInsightSummary(
+  reviews: ReviewItem[],
+  options: InsightOptions = {}
+): InsightSummary {
   if (reviews.length === 0) {
     return {
       weeklyTitle: 'まずは1件から始めましょう',
@@ -38,13 +45,15 @@ export function buildInsightSummary(reviews: ReviewItem[]): InsightSummary {
       .filter((value): value is MoodValue => value !== undefined)
   );
   const topTemplate = mostCommon(last7Days.map((item) => item.templateName));
+  const topActionTag = mostCommon(last7Days.flatMap((item) => item.actionTagIds));
   const topStateTag = mostCommon(last7Days.flatMap((item) => item.stateTagIds));
+  const topActionTagLabel = topActionTag ? options.tagLabelMap?.get(topActionTag) : undefined;
 
   const parts = [
     `${last7Days.length}件の記録`,
     streak > 0 ? `連続 ${streak}日` : null,
     topMoodValue ? `気分は「${getMoodOption(topMoodValue).label}」が多めです` : null,
-    topTemplate ? `よく使っているのは「${topTemplate}」です` : null,
+    topActionTagLabel ? `よく使っている行動タグは「${topActionTagLabel}」です` : null,
   ].filter(Boolean);
 
   return {
@@ -55,7 +64,7 @@ export function buildInsightSummary(reviews: ReviewItem[]): InsightSummary {
     weeklyStats: [
       { label: '今週の記録', value: `${last7Days.length}件` },
       { label: '連続日数', value: `${streak}日` },
-      { label: 'よく使う型', value: topTemplate ?? 'まだなし' },
+      { label: 'よく使う行動タグ', value: topActionTagLabel ?? 'まだなし' },
     ],
   };
 }
