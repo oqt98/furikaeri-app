@@ -4,10 +4,11 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import AppHeader from '../../components/AppHeader';
 import SideMenu from '../../components/SideMenu';
 import SwipeTabPage from '../../components/SwipeTabPage';
-import { MOOD_OPTIONS } from '../../data/reviewOptions';
+import { MOOD_DISPLAY_OPTIONS } from '../../data/reviewOptions';
 import { buildInsightSummary } from '../../lib/insights';
 import { reviewRepository } from '../../lib/reviewRepository';
 import { type ReviewItem } from '../../lib/storage';
+import { tagRepository } from '../../lib/tagRepository';
 import { createCardShadow } from '../../lib/theme';
 import { useAppTheme } from '../../lib/theme-context';
 
@@ -15,6 +16,7 @@ export default function AnalyticsScreen() {
   const { theme, t, locale } = useAppTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
   const [reviews, setReviews] = useState<ReviewItem[]>([]);
+  const [tagLabelMap, setTagLabelMap] = useState<Map<string, string>>(new Map());
   const [isMenuVisible, setIsMenuVisible] = useState(false);
   const [isBreakdownVisible, setIsBreakdownVisible] = useState(false);
   const [isLoadingData, setIsLoadingData] = useState(true);
@@ -25,7 +27,14 @@ export default function AnalyticsScreen() {
     setLoadError(null);
 
     try {
-      setReviews(await reviewRepository.list());
+      const [nextReviews, tagCatalog] = await Promise.all([
+        reviewRepository.list(),
+        tagRepository.getCatalog(),
+      ]);
+      setReviews(nextReviews);
+      setTagLabelMap(
+        new Map([...tagCatalog.action, ...tagCatalog.state].map((tag) => [tag.id, tag.label]))
+      );
     } catch (error) {
       console.error('analytics load error:', error);
       setLoadError('分析データを読み込めませんでした。少し時間をおいて再度お試しください。');
@@ -45,19 +54,32 @@ export default function AnalyticsScreen() {
     const uniqueDays = new Set(
       reviews.map((item) => new Date(item.createdAt).toISOString().slice(0, 10))
     ).size;
-    const moodCounts = MOOD_OPTIONS.map((mood) => ({
+    const moodCounts = MOOD_DISPLAY_OPTIONS.map((mood) => ({
       label: `${mood.emoji} ${mood.label}`,
       count: reviews.filter((item) => item.mood === mood.value).length,
     }));
+    const actionTagCounts = buildTagCounts(
+      reviews.flatMap((item) => item.actionTagIds),
+      tagLabelMap
+    );
+    const stateTagCounts = buildTagCounts(
+      reviews.flatMap((item) => item.stateTagIds),
+      tagLabelMap
+    );
     return {
       total,
       uniqueDays,
       averagePerWeek: total === 0 ? 0 : Math.max(Math.round((total / 4) * 10) / 10, 0.5),
       moodCounts,
+      actionTagCounts,
+      stateTagCounts,
     };
-  }, [reviews]);
+  }, [reviews, tagLabelMap]);
 
-  const insight = useMemo(() => buildInsightSummary(reviews), [reviews]);
+  const insight = useMemo(
+    () => buildInsightSummary(reviews, { tagLabelMap }),
+    [reviews, tagLabelMap]
+  );
 
   return (
     <SwipeTabPage tabKey="analytics">
@@ -128,6 +150,18 @@ export default function AnalyticsScreen() {
                     title={t('analytics.moodBreakdown')}
                     rows={analytics.moodCounts}
                   />
+                  {analytics.actionTagCounts.length > 0 ? (
+                    <CompactBreakdownCard
+                      title={locale === 'en' ? 'Frequent action tags' : 'よく使う行動タグ'}
+                      rows={analytics.actionTagCounts}
+                    />
+                  ) : null}
+                  {analytics.stateTagCounts.length > 0 ? (
+                    <CompactBreakdownCard
+                      title={locale === 'en' ? 'Frequent state tags' : 'よく使う気分タグ'}
+                      rows={analytics.stateTagCounts}
+                    />
+                  ) : null}
                 </View>
               ) : null}
             </SectionCard>
@@ -263,6 +297,19 @@ function CompactBreakdownCard({
       ))}
     </View>
   );
+}
+
+function buildTagCounts(tagIds: string[], tagLabelMap: Map<string, string>) {
+  const counts = tagIds.reduce((map, tagId) => {
+    const label = tagLabelMap.get(tagId);
+    if (!label) return map;
+    map.set(label, (map.get(label) ?? 0) + 1);
+    return map;
+  }, new Map<string, number>());
+
+  return [...counts.entries()]
+    .map(([label, count]) => ({ label, count }))
+    .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
 }
 
 function createStyles(theme: ReturnType<typeof useAppTheme>['theme']) {
