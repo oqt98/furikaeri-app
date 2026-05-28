@@ -68,6 +68,12 @@ Daynote は、医療・心理診断を目的としたアプリではありませ
 
 ## Play Console 申告メモ
 
+運営者名: Daynote 運営者
+
+問い合わせメール: oqt.1998@gmail.com
+
+プライバシーポリシーURL: [GitHub Pages公開後に確定]
+
 実装上、次のデータを扱います。
 
 | データ | 保存先 |
@@ -76,8 +82,8 @@ Daynote は、医療・心理診断を目的としたアプリではありませ
 | 気分、カテゴリ、タグ | 端末内、Supabase DB |
 | 写真と写真メモ | 端末内、Supabase Storage / DB |
 | 大切な日の名前、日付、種類、毎年繰り返すかどうか、作成日時、更新日時 | 端末内のみ |
-| 通知リマインダー設定 | 端末内、必要に応じてSupabase DB |
-| アプリ設定 | 端末内 |
+| 通知リマインダー設定 | 端末内、Supabase DB (`app_preferences`) |
+| アプリ設定 | 端末内、Supabase DB (`app_preferences`) |
 | 匿名認証用のユーザー ID | Supabase Auth |
 
 初回リリースでは課金、AI要約、Import / Export、Notion CSV import、JSON export / import はありません。大切な日は初回リリース時点では端末内保存で、Supabase同期対象ではありません。
